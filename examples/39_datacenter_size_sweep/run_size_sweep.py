@@ -36,6 +36,19 @@ N_TIMESTEPS = 8760
 COST_YEAR = 2026
 ELECTRICITY_PRICE_USD_PER_KWH = 0.04574
 WATER_PRICE_USD_PER_GAL = 0.01
+
+# Heat-pump value analysis
+# Reference thermal-energy price levels for the breakeven analysis.
+# Typical U.S. district-heating heat sale prices span roughly $20-70/MWh_th;
+# avoiding a natural-gas boiler at $5/MMBtu with 85% efficiency is about
+# $20/MWh_th; retail residential-scale thermal energy tends to be $40-60+.
+REFERENCE_HEAT_VALUES_USD_PER_MWH_TH = {
+    r"NG boiler avoided (\$5/MMBtu, 85% eff)": 20.0,
+    "Wholesale DH sale": 30.0,
+    "Retail thermal energy": 60.0,
+}
+HEAT_VALUE_SWEEP_USD_PER_MWH_TH = np.linspace(0.0, 100.0, 51)
+
 # Duluth, MN
 SITE_LAT = 46.7867
 SITE_LON = -92.1005
@@ -366,6 +379,125 @@ def make_plots(df, out_dir):
     print(f"Saved plot to {out_path}")
 
 
+# ---------------------------------------------------------------------------
+# Heat-pump economic value analysis
+# ---------------------------------------------------------------------------
+
+
+def compute_hp_economics(df):
+    """Compare the lifetime cost of adding the heat pump to the lifetime value
+    of the heat it delivers.
+
+    Incremental HP-related cost (relative to the DC-only case) = added CapEx,
+    added fixed OpEx (× plant_life), and added variable OpEx (the electricity
+    the HP consumes, over the full plant life).
+
+    Value = user-chosen thermal-energy price × lifetime heat delivered.
+
+    Returns a DataFrame indexed by DC size with per-size incremental cost,
+    lifetime heat, breakeven thermal-energy price, and net lifetime benefit
+    evaluated at each ``REFERENCE_HEAT_VALUES_USD_PER_MWH_TH``.
+    """
+    dc_only = df[~df["with_hp"]].set_index("dc_size_mw").sort_index()
+    dc_hp = df[df["with_hp"]].set_index("dc_size_mw").sort_index()
+
+    rows = []
+    for size in dc_hp.index:
+        incremental_capex_musd = dc_hp.at[size, "total_capex_musd"] - dc_only.at[
+            size, "total_capex_musd"
+        ]
+        incremental_annual_opex_musd = (
+            dc_hp.at[size, "annual_fixed_opex_musd_per_yr"]
+            - dc_only.at[size, "annual_fixed_opex_musd_per_yr"]
+        )
+        incremental_lifetime_varopex_musd = (
+            dc_hp.at[size, "lifetime_variable_opex_musd"]
+            - dc_only.at[size, "lifetime_variable_opex_musd"]
+        )
+        incremental_lifetime_cost_musd = (
+            incremental_capex_musd
+            + incremental_annual_opex_musd * PLANT_LIFE
+            + incremental_lifetime_varopex_musd
+        )
+
+        annual_heat_gwh_th = dc_hp.at[size, "annual_hp_heat_delivered_gwh_th"]
+        # 1 GWh = 1e3 MWh
+        lifetime_heat_mwh_th = annual_heat_gwh_th * 1e3 * PLANT_LIFE
+
+        breakeven_usd_per_mwh_th = (
+            incremental_lifetime_cost_musd * 1e6 / lifetime_heat_mwh_th
+            if lifetime_heat_mwh_th > 0
+            else np.nan
+        )
+
+        row = {
+            "dc_size_mw": size,
+            "incremental_capex_musd": incremental_capex_musd,
+            "incremental_annual_opex_musd_per_yr": incremental_annual_opex_musd,
+            "incremental_lifetime_varopex_musd": incremental_lifetime_varopex_musd,
+            "incremental_lifetime_cost_musd": incremental_lifetime_cost_musd,
+            "lifetime_heat_delivered_gwh_th": lifetime_heat_mwh_th / 1e3,
+            "breakeven_heat_price_usd_per_mwh_th": breakeven_usd_per_mwh_th,
+        }
+        for label, price in REFERENCE_HEAT_VALUES_USD_PER_MWH_TH.items():
+            row[f"net_benefit_at_{price:.0f}_usd_per_mwh_musd"] = (
+                price * lifetime_heat_mwh_th / 1e6 - incremental_lifetime_cost_musd
+            )
+        rows.append(row)
+
+    return pd.DataFrame(rows).set_index("dc_size_mw")
+
+
+def make_economics_plots(econ_df, out_dir):
+    """Two-panel economic plot: breakeven price per size + net benefit vs price."""
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    sizes = econ_df.index.to_numpy()
+    fig, axes = plt.subplots(1, 2, figsize=(13, 4.8))
+
+    # Panel A: breakeven thermal-energy price per DC size, with reference lines
+    ax = axes[0]
+    breakevens = econ_df["breakeven_heat_price_usd_per_mwh_th"].to_numpy()
+    x = np.arange(len(sizes))
+    ax.bar(x, breakevens, color="#8e44ad", label="Breakeven price")
+    for label, price in REFERENCE_HEAT_VALUES_USD_PER_MWH_TH.items():
+        ax.axhline(price, linestyle="--", alpha=0.7, label=rf"{label} (\${price:.0f})")
+    ax.set_xticks(x)
+    ax.set_xticklabels([f"{s} MW" for s in sizes])
+    ax.set_ylabel("Heat price to break even (USD/MWh$_{th}$)")
+    ax.set_title("Heat-pump breakeven heat price")
+    ax.grid(axis="y", alpha=0.3)
+    ax.legend(fontsize=8, loc="upper right")
+
+    # Panel B: net lifetime benefit vs assumed heat value, one line per size
+    ax = axes[1]
+    prices = HEAT_VALUE_SWEEP_USD_PER_MWH_TH
+    for size in sizes:
+        lifetime_heat_mwh_th = econ_df.at[size, "lifetime_heat_delivered_gwh_th"] * 1e3
+        incr_cost_musd = econ_df.at[size, "incremental_lifetime_cost_musd"]
+        net_benefit_musd = prices * lifetime_heat_mwh_th / 1e6 - incr_cost_musd
+        ax.plot(prices, net_benefit_musd, label=f"{size} MW DC", linewidth=2)
+    ax.axhline(0.0, color="k", linewidth=0.8)
+    for label, price in REFERENCE_HEAT_VALUES_USD_PER_MWH_TH.items():
+        ax.axvline(price, linestyle="--", alpha=0.5, color="gray")
+    ax.set_xlabel("Assumed thermal-energy value (USD/MWh$_{th}$)")
+    ax.set_ylabel("Net lifetime benefit of HP (M USD)")
+    ax.set_title(f"Net {PLANT_LIFE}-yr benefit vs. heat value")
+    ax.grid(alpha=0.3)
+    ax.legend(fontsize=9, loc="upper left")
+
+    fig.suptitle(
+        f"Heat-pump value analysis (Duluth, MN, {PLANT_LIFE}-yr life, "
+        f"delivery {HP_DELIVERY_TEMP_C:.0f} C / 140 F)"
+    )
+    fig.tight_layout()
+
+    out_path = out_dir / "heat_pump_economics.png"
+    fig.savefig(out_path, dpi=150)
+    print(f"Saved plot to {out_path}")
+
+
 def main():
     df = run_sweep()
     print()
@@ -381,6 +513,20 @@ def main():
     print(f"Saved results table to {csv_path}")
 
     make_plots(df.reset_index(), out_dir)
+
+    # -- Heat-pump economic value analysis -----------------------------------
+    econ_df = compute_hp_economics(df.reset_index())
+    print()
+    print("Heat-pump economics (incremental cost vs. lifetime heat delivered)")
+    print("=" * 100)
+    print(econ_df.to_string(float_format=lambda x: f"{x:,.3f}"))
+    print("=" * 100)
+
+    econ_csv_path = out_dir / "heat_pump_economics.csv"
+    econ_df.to_csv(econ_csv_path)
+    print(f"Saved economics table to {econ_csv_path}")
+
+    make_economics_plots(econ_df, out_dir)
 
 
 if __name__ == "__main__":
