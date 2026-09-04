@@ -14,10 +14,9 @@ inputs.
 """
 
 import numpy as np
-from attrs import field, define
+from attrs import field, define, validators
 
 from h2integrate.core.utilities import BaseConfig, merge_shared_inputs
-from h2integrate.core.validators import gt_zero, contains, gte_zero
 from h2integrate.core.model_baseclasses import (
     CostModelBaseClass,
     CostModelBaseConfig,
@@ -48,9 +47,9 @@ class HeatPumpPerformanceConfig(BaseConfig):
             treated as infeasible (no heat delivered).
     """
 
-    hp_mode: str = field(validator=contains(("fixed_cop", "carnot")))
-    system_capacity_mw_th: float = field(validator=gt_zero)
-    delivery_temp_C: float = field(validator=gt_zero)
+    hp_mode: str = field(validator=validators.in_(("fixed_cop", "carnot")))
+    system_capacity_mw_th: float = field(validator=validators.gt(0))
+    delivery_temp_C: float = field(validator=validators.gt(0))
     cop: float = field(default=None)
     carnot_efficiency: float = field(default=0.5)
     min_source_temp_C: float = field(default=None)
@@ -272,10 +271,10 @@ class HeatPumpCostConfig(CostModelBaseConfig):
         variable_opex_per_mwh_th (float): Variable O&M per delivered MWh_th.
     """
 
-    system_capacity_mw_th: float = field(validator=gt_zero)
-    capex_per_mw_th: float = field(validator=gte_zero)
-    fixed_opex_per_mw_th_per_year: float = field(validator=gte_zero)
-    variable_opex_per_mwh_th: float = field(default=0.0, validator=gte_zero)
+    system_capacity_mw_th: float = field(validator=validators.gt(0))
+    capex_per_mw_th: float = field(validator=validators.ge(0))
+    fixed_opex_per_mw_th_per_year: float = field(validator=validators.ge(0))
+    variable_opex_per_mwh_th: float = field(default=0.0, validator=validators.ge(0))
 
 
 class HeatPumpCostModel(CostModelBaseClass):

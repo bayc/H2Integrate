@@ -6,7 +6,6 @@ import eeweather
 from attrs import field, define, validators
 
 from h2integrate.core.utilities import BaseConfig, merge_shared_inputs
-from h2integrate.core.validators import gt_zero, gte_zero
 from h2integrate.core.model_baseclasses import (
     CostModelBaseClass,
     CostModelBaseConfig,
@@ -27,10 +26,10 @@ class DataCenterPerformanceConfig(BaseConfig):
         water_use_gal_per_mwh (float): Water usage per compute load in galUS/MWh.
     """
 
-    system_capacity_mw: float = field(validator=gt_zero)
-    compute_electrical_efficiency: float = field(validator=gt_zero)
-    cooling_load_ratio: float = field(validator=gte_zero)
-    water_use_gal_per_mwh: float = field(validator=gte_zero)
+    system_capacity_mw: float = field(validator=validators.gt(0))
+    compute_electrical_efficiency: float = field(validator=validators.gt(0))
+    cooling_load_ratio: float = field(validator=validators.ge(0))
+    water_use_gal_per_mwh: float = field(validator=validators.ge(0))
     demand_profile: int | float | list = field()
 
 
@@ -203,10 +202,10 @@ class DataCenterCostConfig(CostModelBaseConfig):
             USD/(MW*h). This includes costs of electricity and water inputs.
     """
 
-    system_capacity_mw: float = field(validator=gt_zero)
-    capex_per_mw: float | int = field(validator=gte_zero)
-    fixed_opex_per_mw_per_year: float | int = field(validator=gte_zero)
-    variable_opex_per_mwh: float | int = field(validator=gte_zero)
+    system_capacity_mw: float = field(validator=validators.gt(0))
+    capex_per_mw: float | int = field(validator=validators.ge(0))
+    fixed_opex_per_mw_per_year: float | int = field(validator=validators.ge(0))
+    variable_opex_per_mwh: float | int = field(validator=validators.ge(0))
 
 
 class DataCenterCostModel(CostModelBaseClass):
@@ -340,9 +339,9 @@ class DataCenterPUEWUEPerformanceConfig(BaseConfig):
     """
 
     compute_it_workload_profile: int | float | list = field()
-    system_capacity_mw: float = field(validator=gt_zero)
+    system_capacity_mw: float = field(validator=validators.gt(0))
     pue: float = field(validator=validators.gt(1.0), default=None)
-    wue: float = field(validator=gte_zero, default=None)
+    wue: float = field(validator=validators.ge(0), default=None)
     climate_zone: str = field(default=None)
     efficiency_level: str = field(default="efficient")
     cooling_configuration: int = field(default=None)
@@ -907,15 +906,15 @@ class DataCenterPUEWUECostConfig(CostModelBaseConfig):
         fixed_opex_per_mw_per_year (float | int): Fixed annual O&M per MW of IT capacity in USD/(MW*year).
     """
 
-    electricity_rate: float = field(validator=gte_zero)
-    water_rate: float = field(validator=gte_zero)
-    capex_per_mw: float | int = field(validator=gte_zero)
-    fixed_opex_per_mw_per_year: float | int = field(validator=gte_zero)
-    system_capacity_mw: float = field(validator=gt_zero)
+    electricity_rate: float = field(validator=validators.ge(0))
+    water_rate: float = field(validator=validators.ge(0))
+    capex_per_mw: float | int = field(validator=validators.ge(0))
+    fixed_opex_per_mw_per_year: float | int = field(validator=validators.ge(0))
+    system_capacity_mw: float = field(validator=validators.gt(0))
     # Optional sale price for recoverable waste heat delivered to downstream
     # techs. When > 0, revenue = price * total_waste_heat_MWh is credited
     # against OpEx.
-    waste_heat_sale_price_usd_per_mwh: float = field(default=0.0, validator=gte_zero)
+    waste_heat_sale_price_usd_per_mwh: float = field(default=0.0, validator=validators.ge(0))
 
 
 class DataCenterPUEWUECostModel(CostModelBaseClass):

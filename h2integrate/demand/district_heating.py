@@ -8,10 +8,9 @@ heat delivered at insufficient supply temperatures is treated as unusable
 """
 
 import numpy as np
-from attrs import field, define
+from attrs import field, define, validators
 
 from h2integrate.core.utilities import merge_shared_inputs
-from h2integrate.core.validators import gt_zero, gte_zero
 from h2integrate.demand.demand_base import DemandComponentBase, DemandComponentBaseConfig
 from h2integrate.core.model_baseclasses import CostModelBaseClass, CostModelBaseConfig
 
@@ -30,8 +29,8 @@ class DistrictHeatingDemandConfig(DemandComponentBaseConfig):
             reported and counted but delivery is not blocked.
     """
 
-    min_supply_temp_C: float = field(validator=gt_zero)
-    system_capacity_mw_th: float = field(validator=gt_zero)
+    min_supply_temp_C: float = field(validator=validators.gt(0))
+    system_capacity_mw_th: float = field(validator=validators.gt(0))
     strict_temperature: bool = field(default=True)
 
 
@@ -123,10 +122,10 @@ class DistrictHeatingDemandCostConfig(CostModelBaseConfig):
         variable_opex_per_mwh_th (float): Variable O&M per delivered MWh_th.
     """
 
-    system_capacity_mw_th: float = field(validator=gt_zero)
-    capex_per_mw_th: float = field(validator=gte_zero)
-    fixed_opex_per_mw_th_per_year: float = field(validator=gte_zero)
-    variable_opex_per_mwh_th: float = field(default=0.0, validator=gte_zero)
+    system_capacity_mw_th: float = field(validator=validators.gt(0))
+    capex_per_mw_th: float = field(validator=validators.ge(0))
+    fixed_opex_per_mw_th_per_year: float = field(validator=validators.ge(0))
+    variable_opex_per_mwh_th: float = field(default=0.0, validator=validators.ge(0))
 
 
 class DistrictHeatingDemandCostModel(CostModelBaseClass):
