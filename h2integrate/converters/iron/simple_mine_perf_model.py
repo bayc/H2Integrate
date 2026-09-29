@@ -5,11 +5,11 @@ from openmdao.utils import units
 
 from h2integrate import ROOT_DIR
 from h2integrate.core.utilities import BaseConfig, merge_shared_inputs
-from h2integrate.core.model_baseclasses import PerformanceModelBaseClass
+from h2integrate.core.model_baseclass import PerformanceModelBaseClass
 
 
 @define(kw_only=True)
-class SimpleIronMinePerformanceConfig(BaseConfig):
+class SimpleIronMinePerformanceComponentConfig(BaseConfig):
     """Configuration class for SimpleIronMinePerformanceComponent.
 
     Attributes:
@@ -46,7 +46,7 @@ class SimpleIronMinePerformanceComponent(PerformanceModelBaseClass):
 
     def setup(self):
         super().setup()
-        self.config = SimpleIronMinePerformanceConfig.from_dict(
+        self.config = SimpleIronMinePerformanceComponentConfig.from_dict(
             merge_shared_inputs(self.options["tech_config"]["model_inputs"], "performance"),
             strict=True,
             additional_cls_name=self.__class__.__name__,
@@ -136,11 +136,11 @@ class SimpleIronMinePerformanceComponent(PerformanceModelBaseClass):
         coeff_df.loc[i_wlt, "Value"] = coeff_df.loc[i_wlt, "Value"] * dry_fraction
         coeff_df.loc[i_wlt, "Unit"] = "lt/yr"
 
-        # convert kWh/wet long ton to kWh/dry long ton
-        i_per_wlt = coeff_df[coeff_df["Unit"] == "kWh/LT pellet"].index.to_list()
-        coeff_df.loc[i_per_wlt, "Value"] = coeff_df.loc[i_per_wlt, "Value"] / dry_fraction
-        coeff_df.loc[i_per_wlt, "Unit"] = "kWh/lt"
-        coeff_df.loc[i_per_wlt, "Type"] = "energy use/pellet"
+        # update units to kWh/dry long ton
+        i = coeff_df[coeff_df["Unit"] == "kWh/LT pellet"].index.to_list()
+        coeff_df.loc[i, "Value"] = coeff_df.loc[i, "Value"]
+        coeff_df.loc[i, "Unit"] = "kWh/lt"
+        coeff_df.loc[i, "Type"] = "energy use/pellet"
 
         # convert units to standardized units
         unit_rename_mapper = {}
