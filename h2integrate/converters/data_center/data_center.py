@@ -340,8 +340,8 @@ class DataCenterPUEWUEPerformanceConfig(BaseConfig):
 
     compute_it_workload_profile: int | float | list = field()
     system_capacity_mw: float = field(validator=validators.gt(0))
-    pue: float = field(validator=validators.gt(1.0), default=None)
-    wue: float = field(validator=validators.ge(0), default=None)
+    pue: float = field(validator=validators.optional(validators.gt(1.0)), default=None)
+    wue: float = field(validator=validators.optional(validators.ge(0)), default=None)
     climate_zone: str = field(default=None)
     efficiency_level: str = field(default="efficient")
     cooling_configuration: int = field(default=None)
@@ -367,13 +367,21 @@ class DataCenterPUEWUEPerformanceConfig(BaseConfig):
         8: "Small DC; Water-cooled chiller",
         9: "Small DC; Air-cooled chiller",
         10: "Small DC; Direct expansion system",
+        # Direct-to-chip liquid cooling variants. "Air-cooled" here refers to the
+        # heat-reject side (dry cooler); "water-cooled" uses a water-cooled
+        # chiller / cooling tower. In both cases the primary ITE loop is warm
+        # water in direct contact with the chip cold plates, which enables
+        # substantially higher waste-heat recovery than any of cases 1-10.
+        11: "Liquid-cooled DC; Direct-to-chip liquid loop + dry cooling + adiabatic cooling + (air-cooled chiller)",
+        12: "Liquid-cooled DC; Direct-to-chip liquid loop + waterside  economizer + (water-cooled chiller)",
     }
 
     # Cooling configuration cases valid for each data center size category.
     # Large-scale: > 20,000 sqft; Midsize: 1,000–20,000 sqft; Small: < 1,000 sqft
+    # Liquid-cooled cases 11-12 are applicable to both large and midsize builds.
     SIZE_COOLING_CONFIGURATIONS = {
-        "large": [1, 2],
-        "midsize": [3, 4, 5, 6, 7],
+        "large": [1, 2, 11, 12],
+        "midsize": [3, 4, 5, 6, 7, 11, 12],
         "small": [8, 9, 10],
     }
 
@@ -413,10 +421,22 @@ class DataCenterPUEWUEPerformanceConfig(BaseConfig):
         8: {"recoverable_fraction": 0.12, "supply_temp_C": 35.0, "return_temp_C": 25.0},
         9: {"recoverable_fraction": 0.06, "supply_temp_C": 28.0, "return_temp_C": 20.0},
         10: {"recoverable_fraction": 0.05, "supply_temp_C": 30.0, "return_temp_C": 22.0},
+        # Direct-to-chip liquid cooling. Warm-water loops in direct contact
+        # with the chips reject heat at 45-55 C, so a much larger fraction of
+        # the IT power is captured as high-grade heat than in cases 1-10.
+        # Refs: Ellsworth et al., "Warm liquid cooling at 45 C", IEEE
+        # ITHERM 2012; Iyengar et al., "Server liquid cooling with chiller-less
+        # data center design", IBM J. Res. Dev. 55.5 (2011); Zimmermann et al.,
+        # "Aquasar: A hot water cooled data center with direct energy reuse",
+        # Energy 43 (2012) 237-245.
+        11: {"recoverable_fraction": 0.45, "supply_temp_C": 45.0, "return_temp_C": 35.0},
+        12: {"recoverable_fraction": 0.55, "supply_temp_C": 50.0, "return_temp_C": 40.0},
     }
 
     def __attrs_post_init__(self):
-        # Check to see if the user has provided either PUE/WUE or climate zone (but not both)
+        # Check to see if the user has provided either PUE/WUE or climate zone (but not both).
+        # It is also allowed to supply neither, in which case the climate zone is inferred
+        # from the site's latitude/longitude at setup time.
         has_pue = self.pue is not None
         has_wue = self.wue is not None
         has_climate_zone = self.climate_zone is not None
@@ -427,13 +447,8 @@ class DataCenterPUEWUEPerformanceConfig(BaseConfig):
             raise ValueError(
                 f"Both 'pue' and 'wue' must be provided together, but only '{provided}' was "
                 f"supplied. Provide '{missing}' as well, or omit both and supply 'climate_zone' "
-                f"instead."
-            )
-
-        if not has_pue and not has_climate_zone:
-            raise ValueError(
-                "Either both 'pue' and 'wue', or 'climate_zone' must be provided. "
-                "Neither was supplied."
+                f"instead (or omit all three to infer the climate zone from the site "
+                f"latitude/longitude)."
             )
 
         if has_pue and has_climate_zone:
@@ -483,6 +498,39 @@ class DataCenterPUEWUEPerformanceModel(PerformanceModelBaseClass):
             merge_shared_inputs(self.options["tech_config"]["model_inputs"], "performance"),
             additional_cls_name=self.__class__.__name__,
         )
+
+        # When the user did not supply a climate zone (and did not supply PUE/WUE either),
+        # infer it from the site's latitude/longitude in the plant config.
+        if self.config.pue is None and self.config.climate_zone is None:
+            try:
+                site = self.options["plant_config"]["sites"]["site"]
+                latitude = site["latitude"]
+                longitude = site["longitude"]
+            except (KeyError, TypeError) as err:
+                raise ValueError(
+                    "Could not resolve PUE/WUE: neither 'pue'/'wue' nor 'climate_zone' were "
+                    "supplied, and the plant configuration does not contain "
+                    "sites.site.latitude/longitude for climate-zone lookup. Supply one of these."
+                ) from err
+            self.config.climate_zone = self.determine_iecc_climate_zone(latitude, longitude)
+
+        # When the user did not supply PUE/WUE directly, look them up from the
+        # Lei & Masanet climate-zone dataset. When ``cooling_configuration`` is
+        # not set either, the auto-selected case is stored back on the config
+        # so downstream logic (e.g. waste-heat parameter resolution) can use it.
+        if self.config.pue is None:
+            pue, wue, case_num = self.determine_pue_wue_by_climate_zone(
+                climate_zone=self.config.climate_zone,
+                efficiency=self.config.efficiency_level,
+                cooling_configuration=self.config.cooling_configuration,
+                optimize_for=self.config.optimize_for,
+                size_sqft=self.config.size_sqft,
+            )
+            self.config.pue = pue
+            self.config.wue = wue
+            if self.config.cooling_configuration is None:
+                self.config.cooling_configuration = case_num
+
         super().setup()
 
         # Inputs
@@ -717,7 +765,8 @@ class DataCenterPUEWUEPerformanceModel(PerformanceModelBaseClass):
                 f"({latitude}, {longitude}): {warnings}"
             )
 
-        return f"{iecc_zone}{iecc_moisture}"
+        # IECC zones 7 and 8 do not use a moisture-regime suffix.
+        return f"{iecc_zone}{iecc_moisture}" if iecc_moisture else str(iecc_zone)
 
     def _classify_size(self, size_sqft):
         """Return "large", "midsize", or "small" based on floor area in square feet."""
@@ -748,7 +797,7 @@ class DataCenterPUEWUEPerformanceModel(PerformanceModelBaseClass):
             climate_zone (str): The IECC climate zone (e.g., "2A", "4B").
             efficiency (str): Either "efficient" (5th percentile) or "inefficient"
                 (95th percentile). Defaults to "efficient".
-            cooling_configuration (int | None): The cooling configuration number (1-10) to look
+            cooling_configuration (int | None): The cooling configuration number (1-12) to look
                 up. If None, the configuration is selected automatically. Valid values:
 
                     1  - Large-scale DC; Airside economizer + adiabatic cooling + (water-cooled chiller)
@@ -761,6 +810,8 @@ class DataCenterPUEWUEPerformanceModel(PerformanceModelBaseClass):
                     8  - Small DC; Water-cooled chiller
                     9  - Small DC; Air-cooled chiller
                     10 - Small DC; Direct expansion system
+                    11 - Liquid-cooled DC; Direct-to-chip liquid loop + dry cooler
+                    12 - Liquid-cooled DC; Direct-to-chip liquid loop + water-cooled chiller
 
             optimize_for (str): When ``cooling_configuration`` is None, selects the
                 configuration with the lowest "pue" or lowest "wue". Defaults to "pue".
@@ -768,13 +819,15 @@ class DataCenterPUEWUEPerformanceModel(PerformanceModelBaseClass):
                 provided and ``cooling_configuration`` is None, only configurations valid for
                 the corresponding size category are considered:
 
-                    Large-scale (> 20,000 sqft): configurations 1-2
-                    Midsize     (1,000-20,000 sqft): configurations 3-7
+                    Large-scale (> 20,000 sqft): configurations 1, 2, 11, 12
+                    Midsize     (1,000-20,000 sqft): configurations 3-7, 11, 12
                     Small       (< 1,000 sqft): configurations 8-10
 
         Returns:
-            tuple: A tuple containing (pue, wue) values for the given climate zone,
-                cooling configuration, and efficiency level.
+            tuple: A tuple ``(pue, wue, case_num)`` for the given climate zone,
+                cooling configuration, and efficiency level. ``case_num`` is the
+                integer cooling-configuration case that was used (either the one
+                passed in, or the one selected automatically).
         """
         quantile_map = {"efficient": "5th", "inefficient": "95th"}
         if efficiency not in quantile_map:
@@ -805,7 +858,7 @@ class DataCenterPUEWUEPerformanceModel(PerformanceModelBaseClass):
         if cooling_configuration is not None:
             if cooling_configuration not in self.config.COOLING_CONFIGURATIONS:
                 raise ValueError(
-                    f"cooling_configuration must be an integer from 1 to 10, "
+                    f"cooling_configuration must be an integer from 1 to 12, "
                     f"got '{cooling_configuration}'."
                 )
             for case_num, pue, wue in matching_rows:
@@ -871,14 +924,14 @@ class DataCenterPUEWUEPerformanceModel(PerformanceModelBaseClass):
             raise ValueError(
                 "Cannot resolve waste-heat parameters: cooling_configuration is not set "
                 f"and the following overrides are missing: {missing}. Either set "
-                "'cooling_configuration' (1-10) to use per-case literature defaults, "
+                "'cooling_configuration' (1-12) to use per-case literature defaults, "
                 "or supply all three of 'waste_heat_recoverable_fraction', "
                 "'waste_heat_supply_temp_C', and 'waste_heat_return_temp_C'."
             )
 
         if self.config.cooling_configuration not in self.config.WASTE_HEAT_RECOVERY_DEFAULTS:
             raise ValueError(
-                f"cooling_configuration must be an integer from 1 to 10, "
+                f"cooling_configuration must be an integer from 1 to 12, "
                 f"got '{self.config.cooling_configuration}'."
             )
 

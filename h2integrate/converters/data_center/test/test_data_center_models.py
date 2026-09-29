@@ -119,13 +119,16 @@ def test_data_center_performance(plant_config, data_center_performance_params, s
 # ---------------------------------------------------------------------------
 
 
-def _pue_wue_plant_config(n_timesteps=24):
-    return {
+def _pue_wue_plant_config(n_timesteps=24, latitude=None, longitude=None):
+    config = {
         "plant": {
             "plant_life": 30,
             "simulation": {"n_timesteps": n_timesteps, "dt": 3600},
         },
     }
+    if latitude is not None and longitude is not None:
+        config["sites"] = {"site": {"latitude": latitude, "longitude": longitude}}
+    return config
 
 
 def _pue_wue_perf_config(**overrides):
@@ -164,6 +167,111 @@ def _build_pue_wue_perf(plant_config, tech_config):
     prob.set_val("electricity_in", np.full(24, 10.0), units="MW")
     prob.set_val("water_in", np.full(24, 100.0), units="galUS/h")
     return prob
+
+
+def _climate_zone_perf_config(**overrides):
+    """PUE/WUE performance config that omits pue/wue in favor of climate_zone lookup."""
+    params = {
+        "compute_it_workload_profile": [1.0] * 24,
+        "system_capacity_mw": 1.0,
+        "climate_zone": "6A",
+    }
+    params.update(overrides)
+    return {"model_inputs": {"performance_parameters": params}}
+
+
+@pytest.mark.unit
+class TestDataCenterPUEWUEClimateZoneLookup:
+    """``determine_pue_wue_by_climate_zone`` must run when the user omits pue/wue."""
+
+    def test_climate_zone_sets_pue_wue(self):
+        """Supplying only climate_zone populates pue/wue on the config during setup."""
+        plant_config = _pue_wue_plant_config()
+        comp = DataCenterPUEWUEPerformanceModel(
+            plant_config=plant_config,
+            tech_config=_climate_zone_perf_config(cooling_configuration=5),
+        )
+        prob = om.Problem()
+        prob.model.add_subsystem("dc", comp, promotes=["*"])
+        prob.setup()
+        # Case 5, 6A, efficient (5th quantile) → PUE=1.46, WUE=2.39
+        assert comp.config.pue == pytest.approx(1.46)
+        assert comp.config.wue == pytest.approx(2.39)
+        assert comp.config.cooling_configuration == 5
+
+    def test_climate_zone_autoselects_cooling_configuration(self):
+        """Without an explicit cooling_configuration, the best case is chosen and stored."""
+        plant_config = _pue_wue_plant_config()
+        comp = DataCenterPUEWUEPerformanceModel(
+            plant_config=plant_config,
+            tech_config=_climate_zone_perf_config(),
+        )
+        prob = om.Problem()
+        prob.model.add_subsystem("dc", comp, promotes=["*"])
+        prob.setup()
+        # 6A efficient, optimize_for="pue" (default), no size filter → case 2 (PUE=1.08).
+        assert comp.config.cooling_configuration == 2
+        assert comp.config.pue == pytest.approx(1.08)
+        assert comp.config.wue == pytest.approx(1.73)
+
+    def test_climate_zone_size_filter(self):
+        """size_sqft restricts the auto-selection to the correct size category."""
+        plant_config = _pue_wue_plant_config()
+        comp = DataCenterPUEWUEPerformanceModel(
+            plant_config=plant_config,
+            tech_config=_climate_zone_perf_config(size_sqft=5000.0),
+        )
+        prob = om.Problem()
+        prob.model.add_subsystem("dc", comp, promotes=["*"])
+        prob.setup()
+        # 6A midsize (cases 3-7) efficient, optimize_for="pue" → case 4 (PUE=1.27).
+        assert comp.config.cooling_configuration == 4
+        assert comp.config.pue == pytest.approx(1.27)
+
+
+@pytest.mark.unit
+class TestDataCenterPUEWUELatLonLookup:
+    """``determine_iecc_climate_zone`` is used when the user omits ``climate_zone``."""
+
+    def _config_without_climate_zone(self):
+        """PUE/WUE performance config with no pue/wue and no climate zone."""
+        return {
+            "model_inputs": {
+                "performance_parameters": {
+                    "compute_it_workload_profile": [1.0] * 24,
+                    "system_capacity_mw": 1.0,
+                    "cooling_configuration": 5,
+                }
+            }
+        }
+
+    def test_site_latlon_infers_climate_zone(self):
+        """Site lat/lon in the plant config drives a climate-zone lookup."""
+        # Duluth, MN → IECC climate zone 7 (no moisture-regime suffix).
+        plant_config = _pue_wue_plant_config(latitude=46.7867, longitude=-92.1005)
+        comp = DataCenterPUEWUEPerformanceModel(
+            plant_config=plant_config,
+            tech_config=self._config_without_climate_zone(),
+        )
+        prob = om.Problem()
+        prob.model.add_subsystem("dc", comp, promotes=["*"])
+        prob.setup()
+        assert comp.config.climate_zone == "7"
+        # Case 5, zone 7, efficient (5th quantile) → PUE=1.46, WUE=2.37
+        assert comp.config.pue == pytest.approx(1.46)
+        assert comp.config.wue == pytest.approx(2.37)
+
+    def test_missing_site_raises(self):
+        """Without pue/wue, climate_zone, or a site lat/lon, setup raises a clear error."""
+        plant_config = _pue_wue_plant_config()  # no sites entry
+        comp = DataCenterPUEWUEPerformanceModel(
+            plant_config=plant_config,
+            tech_config=self._config_without_climate_zone(),
+        )
+        prob = om.Problem()
+        prob.model.add_subsystem("dc", comp, promotes=["*"])
+        with pytest.raises(ValueError, match="latitude/longitude"):
+            prob.setup()
 
 
 @pytest.mark.unit
