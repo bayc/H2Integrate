@@ -3,11 +3,10 @@ from pathlib import Path
 
 import numpy as np
 import openmdao.api as om
-from attrs import field, define
+from attrs import field, define, validators
 from CoolProp.CoolProp import PropsSI
 
 from h2integrate.core.utilities import BaseConfig, merge_shared_inputs
-from h2integrate.core.validators import gt_zero
 from h2integrate.core.commodity_stream_definitions import (
     multivariable_streams,
     add_multivariable_output,
@@ -43,18 +42,18 @@ class ShellTubeHXPerformanceModelConfig(BaseConfig):
         working_fluid_name: CoolProp fluid name for the working stream.
     """
 
-    process_fluid_temp_C: float = field(validator=gt_zero)
-    working_fluid_temp_C: float = field(validator=gt_zero)
-    process_fluid_mass_flow_kg_s: float = field(validator=gt_zero)
-    working_fluid_mass_flow_kg_s: float = field(validator=gt_zero)
-    process_fluid_pressure_bar: float = field(default=1.0, validator=gt_zero)
-    working_fluid_pressure_bar: float = field(default=1.0, validator=gt_zero)
-    N_tubes: int = field(validator=gt_zero)
-    N_passes: int = field(validator=gt_zero)
-    L_tube_m: float = field(validator=gt_zero)
-    D_o_m: float = field(validator=gt_zero)
-    t_wall_m: float = field(validator=gt_zero)
-    D_shell_m: float = field(validator=gt_zero)
+    process_fluid_temp_C: float = field(validator=validators.gt(0))
+    working_fluid_temp_C: float = field(validator=validators.gt(0))
+    process_fluid_mass_flow_kg_s: float = field(validator=validators.gt(0))
+    working_fluid_mass_flow_kg_s: float = field(validator=validators.gt(0))
+    process_fluid_pressure_bar: float = field(default=1.0, validator=validators.gt(0))
+    working_fluid_pressure_bar: float = field(default=1.0, validator=validators.gt(0))
+    N_tubes: int = field(validator=validators.gt(0))
+    N_passes: int = field(validator=validators.gt(0))
+    L_tube_m: float = field(validator=validators.gt(0))
+    D_o_m: float = field(validator=validators.gt(0))
+    t_wall_m: float = field(validator=validators.gt(0))
+    D_shell_m: float = field(validator=validators.gt(0))
     process_fluid_name: str = field(default="Water")
     working_fluid_name: str = field(default="Water")
     enable_plot: bool = field(default=False)

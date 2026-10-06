@@ -1,8 +1,7 @@
 from attrs import field, define
-from attrs.validators import gt, lt
+from attrs.validators import gt, lt, in_
 
 from h2integrate.core.utilities import BaseConfig, merge_shared_inputs
-from h2integrate.core.validators import gt_zero, must_equal
 from h2integrate.core.model_baseclasses import CostModelBaseClass
 
 
@@ -23,11 +22,11 @@ class ShellTubeHXCostModelConfig(BaseConfig):
             capital expenditure. Default is 0.04 (4%).
     """
 
-    cost_year: int = field(default=2022, converter=int, validator=must_equal(2022))
+    cost_year: int = field(default=2022, converter=int, validator=in_([2022]))
     S: float = field(default=10.0, converter=float, validator=[gt(10), lt(1000)])
-    install_factor: float = field(default=1.61, converter=float, validator=gt_zero)
-    material_factor: float = field(default=1.0, converter=float, validator=gt_zero)
-    opex_percentage: float = field(default=0.04, converter=float, validator=gt_zero)
+    install_factor: float = field(default=1.61, converter=float, validator=gt(0))
+    material_factor: float = field(default=1.0, converter=float, validator=gt(0))
+    opex_percentage: float = field(default=0.04, converter=float, validator=gt(0))
 
 
 class ShellTubeHXCostModel(CostModelBaseClass):

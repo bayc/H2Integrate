@@ -95,6 +95,30 @@ multivariable_streams = {
             "desc": "Pressure of the working fluid",
         },
     },
+    "steam": {
+        "mass_flow": {
+            "units": "kg/s",
+            "desc": (
+                "Mass flow rate of the steam"
+            ),
+        },
+        "temperature": {
+            "units": "degC",
+            "desc": "Temperature of the steam",
+        },
+        "pressure": {
+            "units": "bar",
+            "desc": "Pressure of the steam",
+        },
+        "quality": {
+            "units": "unitless",
+            "desc": "Steam quality (mass fraction of vapor in the steam)",
+        },
+        "phase": {
+            "units": "unitless",
+            "desc": "Steam phase (0 for subcooled liquid, 1 for saturated liquid/vapor, 2 for vapor)",
+        },
+    },
 }
 
 
