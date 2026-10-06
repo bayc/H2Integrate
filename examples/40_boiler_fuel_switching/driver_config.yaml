@@ -1,0 +1,5 @@
+name: driver_config
+description: Driver configuration for the boiler fuel-switching example (example 40)
+general:
+  folder_output: outputs
+  create_om_reports: false

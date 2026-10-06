@@ -1,0 +1,12 @@
+name: H2Integrate_config
+system_summary: >
+  Boiler fuel-switching study. One natural-gas firetube boiler and one electric boiler meet a
+  shared steam load through a main header, HP process and LP process / LP utility (via PRVs). A
+  per-hour cost-merit dispatcher sends each hour's steam demand to the cheaper boiler first (NG at
+  a fixed gas price, electric at a synthetic hourly LMP), then spills the remainder to the other -
+  which, with fixed sizes and no storage, is the exact least-cost dispatch. Condensate returns
+  through the steam recovery loop and make-up water replaces the tracked losses. All values are
+  placeholders.
+driver_config: driver_config.yaml
+technology_config: tech_config.yaml
+plant_config: plant_config.yaml

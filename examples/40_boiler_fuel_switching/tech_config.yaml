@@ -1,0 +1,283 @@
+name: technology_config
+description: >
+  Boiler fuel-switching study: one natural-gas firetube boiler and one electric boiler meet a
+  shared steam load. A per-hour cost-merit dispatcher routes each hour's demand to the cheaper
+  source first (NG at a fixed gas price, electric at an hourly LMP) up to that boiler's rated
+  output, then spills the remainder to the other. The steam header, PRVs, processes and the full
+  steam recovery loop (surge tank -> make-up -> pumps -> deaerator -> boiler feedwater) are reused
+  from example 39. Both boilers are packaged, registered H2Integrate models. Values are
+  placeholders: HP header 12 bar, LP 3 bar, gas 9 USD/MMBtu, electricity from a synthetic LMP.
+general:
+  folder_output: outputs
+technologies:
+
+  # ---- Plant load (exogenous demand driver; keeps the graph acyclic) ----
+  steam_load:
+    performance_model:
+      model: SteamLoadProfiles
+      model_location: models/steam_devices.py
+    model_inputs:
+      performance_parameters:
+        hp_process_demand: 2.5   # kg/s (mean, placeholder)
+        lp_process_demand: 1.5   # kg/s
+        lp_utility_demand: 1.0   # kg/s
+        header_loss_fraction: 0.01
+        diurnal_amplitude_frac: 0.25
+        seasonal_amplitude_frac: 0.15
+        random_seed: 42
+
+  # ---- Per-hour cost-merit dispatch between the two boilers ----
+  cost_merit_dispatcher:
+    performance_model:
+      model: CostMeritBoilerDispatcher
+      model_location: models/dispatch.py
+    model_inputs:
+      performance_parameters:
+        ng_price: 9.0              # USD/MMBtu (must match the NG feedstock price)
+        ng_thermal_efficiency: 0.915
+        elec_efficiency: 0.99
+        ng_rated_steam_kg_s: 5.0
+        elec_rated_steam_kg_s: 5.0
+        electricity_price: !include electricity_price_profile.yaml  # USD/kWh, 8760 values
+
+  # ---- Boilers (packaged models) ----
+  boiler_ng:
+    performance_model:
+      model: NgBoilerPerformance
+    cost_model:
+      model: NgBoilerCost
+    model_inputs:
+      performance_parameters:
+        rated_heat_mw: 12.0
+        steam_pressure_bar: 12.0
+        feedwater_temp_c: 105.0
+        excess_air_pct: 10.0
+        blowdown_fraction: 0.03
+      cost_parameters:
+        cost_year: 2024
+        rated_heat_mw: 12.0
+        capex_per_kw: 214.0
+        fixed_opex_per_kw_yr: 4.3
+
+  boiler_electric:
+    performance_model:
+      model: ElectricBoilerPerformance
+    cost_model:
+      model: ElectricBoilerCost
+    model_inputs:
+      performance_parameters:
+        rated_heat_mw: 12.0
+        steam_pressure_bar: 12.0
+        feedwater_temp_c: 105.0
+        blowdown_fraction: 0.02
+        eta_heater: 0.99
+        grid_co2_intensity: 0.0   # kg/kWh; >0 reports indirect (Scope 2) CO2
+      cost_parameters:
+        cost_year: 2024
+        rated_heat_mw: 12.0
+        eta_heater: 0.99
+        capex_per_kw_electric: 120.0
+        fixed_opex_per_kw_yr: 3.0
+
+  # ---- Feedstocks: natural gas (scalar price) and electricity (hourly LMP) ----
+  natural_gas_feedstock:
+    performance_model:
+      model: FeedstockPerformanceModel
+    cost_model:
+      model: FeedstockCostModel
+    model_inputs:
+      shared_parameters:
+        commodity: natural_gas
+        commodity_rate_units: MMBtu/h
+      performance_parameters:
+        rated_capacity: 60.0   # MMBtu/h
+      cost_parameters:
+        cost_year: 2024
+        commodity_amount_units: MMBtu
+        price: 9.0   # USD/MMBtu (must match the dispatcher's ng_price)
+        annual_cost: 0.0
+        start_up_cost: 0.0
+
+  electricity_feedstock:
+    performance_model:
+      model: FeedstockPerformanceModel
+    cost_model:
+      model: FeedstockCostModel
+    model_inputs:
+      shared_parameters:
+        commodity: electricity
+        commodity_rate_units: kW
+      performance_parameters:
+        rated_capacity: 15000.0   # kW
+      cost_parameters:
+        cost_year: 2024
+        commodity_amount_units: kW*h
+        price: !include electricity_price_profile.yaml   # USD/kWh, 8760 values
+        annual_cost: 0.0
+        start_up_cost: 0.0
+
+  # ---- Main steam header: combine 2 boilers, then split to consumers ----
+  boiler_steam_combiner:
+    performance_model:
+      model: CondensateSurgeTankCombinerPerformance
+    model_inputs:
+      performance_parameters:
+        commodity: steam
+        in_streams: 2
+        tank_pressure: 12.0   # HP header pressure [bar]
+
+  steam_header_splitter:
+    performance_model:
+      model: SteamHeaderSplitterPerformance
+      model_location: models/steam_devices.py
+    model_inputs:
+      performance_parameters:
+        commodity: steam
+        out_streams: 3   # HP process, LP process (via PRV), LP utility (via PRV)
+
+  prv_lp_process:
+    performance_model:
+      model: PressureReducingValve
+      model_location: models/steam_devices.py
+    model_inputs:
+      performance_parameters:
+        outlet_pressure: 3.0   # bar
+
+  prv_lp_utility:
+    performance_model:
+      model: PressureReducingValve
+      model_location: models/steam_devices.py
+    model_inputs:
+      performance_parameters:
+        outlet_pressure: 3.0   # bar
+
+  # ---- Steam-consuming processes ----
+  hp_process:
+    performance_model:
+      model: SteamProcessPerformance
+      model_location: models/steam_devices.py
+    cost_model:
+      model: SteamProcessCost
+      model_location: models/steam_devices.py
+    model_inputs:
+      performance_parameters:
+        loss_fraction: 0.03
+        product_yield: 0.8
+        outlet_pressure: 1.5     # condensate return pressure [bar]
+        outlet_temperature: 95.0  # subcooled condensate [degC]
+      cost_parameters:
+        cost_year: 2024
+        capex: 2000000.0
+        opex: 60000.0
+
+  lp_process:
+    performance_model:
+      model: SteamProcessPerformance
+      model_location: models/steam_devices.py
+    cost_model:
+      model: SteamProcessCost
+      model_location: models/steam_devices.py
+    model_inputs:
+      performance_parameters:
+        loss_fraction: 0.04
+        product_yield: 0.7
+        outlet_pressure: 1.2
+        outlet_temperature: 85.0
+      cost_parameters:
+        cost_year: 2024
+        capex: 1500000.0
+        opex: 45000.0
+
+  lp_utility:
+    performance_model:
+      model: SteamProcessPerformance
+      model_location: models/steam_devices.py
+    cost_model:
+      model: SteamProcessCost
+      model_location: models/steam_devices.py
+    model_inputs:
+      performance_parameters:
+        loss_fraction: 0.05
+        product_yield: 0.0        # utility service, no material product
+        outlet_pressure: 1.1
+        outlet_temperature: 80.0   # condensate drains (not recovered)
+      cost_parameters:
+        cost_year: 2024
+        capex: 800000.0
+        opex: 25000.0
+
+  # ---- Steam recovery loop ----
+  condensate_surge_tank_combiner:
+    performance_model:
+      model: CondensateSurgeTankCombinerPerformance
+    model_inputs:
+      performance_parameters:
+        commodity: steam
+        in_streams: 2   # HP + LP process condensate
+        tank_pressure: 1.05
+
+  makeup_water_intake:
+    performance_model:
+      model: MakeupWaterFromLosses
+      model_location: models/steam_devices.py
+    model_inputs:
+      performance_parameters:
+        n_loss_inputs: 7
+        makeup_temperature: 15.0
+        makeup_pressure: 1.05
+
+  water_feedstock:
+    performance_model:
+      model: FeedstockPerformanceModel
+    cost_model:
+      model: FeedstockCostModel
+    model_inputs:
+      shared_parameters:
+        commodity: water
+        commodity_rate_units: kg/h
+      performance_parameters:
+        rated_capacity: 5000.0   # kg/h
+      cost_parameters:
+        cost_year: 2024
+        commodity_amount_units: kg
+        price: 0.001   # USD/kg
+        annual_cost: 0.0
+        start_up_cost: 0.0
+
+  water_pipe:
+    performance_model:
+      model: GenericTransporterPerformanceModel
+    model_inputs:
+      shared_parameters:
+        commodity: water
+        commodity_rate_units: kg/h
+
+  cst_pump:
+    performance_model:
+      model: WaterPumpPerformance
+    model_inputs:
+      performance_parameters:
+        discharge_pressure: 2.0
+
+  deaerator:
+    performance_model:
+      model: DeaeratorPerformance
+    model_inputs:
+      performance_parameters:
+        da_pressure: 1.36
+        steam_supply_pressure: 11.36
+        steam_supply_quality: 1.0
+        vent_rate_fraction: 0.001
+
+  bfw_pump:
+    performance_model:
+      model: WaterPumpPerformance
+    model_inputs:
+      performance_parameters:
+        discharge_pressure: 13.0   # feed the 12 bar boilers with margin
+
+  boiler_feedwater_sink:
+    performance_model:
+      model: SteamWaterStreamSink
+    model_inputs:
+      performance_parameters: {}
