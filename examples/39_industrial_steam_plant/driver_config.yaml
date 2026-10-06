@@ -1,0 +1,5 @@
+name: driver_config
+description: Driver configuration for the industrial steam plant example (example 39)
+general:
+  folder_output: outputs
+  create_om_reports: false

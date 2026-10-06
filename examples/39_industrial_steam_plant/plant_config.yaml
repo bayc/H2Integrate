@@ -1,0 +1,65 @@
+name: plant_config
+description: >
+  Full industrial steam plant wiring. Demand-driven, feed-forward: the steam_load defines the
+  three process loads, boilers (lead/lag) produce the total, the header splits to consumers,
+  condensate returns through the steam recovery loop, and make-up water replaces the tracked
+  losses. dt=3600 (feedstock models are hourly).
+plant:
+  plant_life: 30
+  simulation:
+    n_timesteps: 8760
+    dt: 3600
+    timezone: -5
+technology_interconnections:
+
+  # ---- Load -> boiler dispatch ----
+  - [steam_load, boiler_dispatcher, [total_steam_demand, total_steam_demand]]
+  - [boiler_dispatcher, boiler_1, [steam_demand_lead, steam_demand]]
+  - [boiler_dispatcher, boiler_2, [steam_demand_lag, steam_demand]]
+
+  # ---- Natural gas feedstocks ----
+  - [natural_gas_feedstock_1, boiler_1, natural_gas, pipe]
+  - [natural_gas_feedstock_2, boiler_2, natural_gas, pipe]
+
+  # ---- Boilers -> main steam header (combine) -> splitter ----
+  - [boiler_1, boiler_steam_combiner, steam]
+  - [boiler_2, boiler_steam_combiner, steam]
+  - [boiler_steam_combiner, steam_header_splitter, steam]
+
+  # ---- Per-outlet header demands (order matches the outlet order below) ----
+  - [steam_load, steam_header_splitter, [hp_process_demand, demand_out1]]
+  - [steam_load, steam_header_splitter, [lp_process_demand, demand_out2]]
+  - [steam_load, steam_header_splitter, [lp_utility_demand, demand_out3]]
+
+  # ---- Header outlets -> consumers (out1 HP, out2 LP process via PRV, out3 LP utility via PRV) ----
+  - [steam_header_splitter, hp_process, steam]
+  - [steam_header_splitter, prv_lp_process, steam]
+  - [steam_header_splitter, prv_lp_utility, steam]
+  - [prv_lp_process, lp_process, steam]
+  - [prv_lp_utility, lp_utility, steam]
+
+  # ---- Condensate returns (HP + LP process to the surge tank; LP utility drains) ----
+  - [hp_process, condensate_surge_tank_combiner, steam]
+  - [lp_process, condensate_surge_tank_combiner, steam]
+
+  # ---- Steam recovery loop ----
+  - [condensate_surge_tank_combiner, makeup_water_intake, steam]
+  - [makeup_water_intake, cst_pump, steam]
+  - [cst_pump, deaerator, steam]
+  - [deaerator, bfw_pump, steam]
+  - [bfw_pump, boiler_feedwater_sink, steam]
+
+  # ---- Make-up water feedstock ----
+  - [water_feedstock, makeup_water_intake, water, water_pipe]
+
+  # ---- Tracked water losses -> make-up sizing (7 upstream loss streams) ----
+  - [boiler_1, makeup_water_intake, [blowdown, loss1]]
+  - [boiler_2, makeup_water_intake, [blowdown, loss2]]
+  - [hp_process, makeup_water_intake, [steam_loss, loss3]]
+  - [lp_process, makeup_water_intake, [steam_loss, loss4]]
+  - [lp_utility, makeup_water_intake, [steam_loss, loss5]]
+  - [lp_utility, makeup_water_intake, [steam:mass_flow_out, loss6]]
+  - [steam_header_splitter, makeup_water_intake, [header_loss_flow, loss7]]
+
+tech_to_dispatch_connections: []
+resource_to_tech_connections: []

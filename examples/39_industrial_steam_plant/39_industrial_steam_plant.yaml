@@ -1,0 +1,12 @@
+name: H2Integrate_config
+system_summary: >
+  An industrial process using steam. Two lead/lag natural-gas firetube boilers feed a main steam
+  header that supplies an HP process directly and LP process / LP utility through pressure
+  reducing valves. HP and LP process condensate return to the steam recovery loop (condensate
+  surge tank -> make-up water -> CST pump -> deaerator -> BFW pump -> boiler feedwater); the
+  LP-utility condensate drains. Natural gas and make-up water are feedstocks. Blowdowns, main-
+  header loss, process steam losses and the utility drain are tracked lost mass, and make-up
+  water is sized to replace them so the plant water balance closes. All values are placeholders.
+driver_config: driver_config.yaml
+technology_config: tech_config.yaml
+plant_config: plant_config.yaml
