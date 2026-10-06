@@ -1,0 +1,105 @@
+name: technology_config
+description: >
+  Steam recovery loop with make-up water supplied by a water feedstock.
+  Returning HP/LP condensate is collected in the condensate surge tank, topped up
+  with make-up water (sized to replace deaerator vent + boiler blowdown losses),
+  pumped, deaerated, and delivered as boiler feedwater. The make-up water rate is
+  computed by ``makeup_water_intake`` and exposed as a ``water_consumed`` demand
+  that the ``water_feedstock`` supplies and prices.
+technologies:
+  hp_condensate_source:
+    performance_model:
+      model: SteamWaterStreamSource
+    model_inputs:
+      performance_parameters:
+        mass_flow: 5.0  # kg/s
+        pressure: 5.0  # bar
+        temperature: 95.0  # degC (sub-cooled liquid)
+        load_profile: constant
+  lp_condensate_source:
+    performance_model:
+      model: SteamWaterStreamSource
+    model_inputs:
+      performance_parameters:
+        mass_flow: 3.0  # kg/s
+        pressure: 2.0  # bar
+        temperature: 85.0  # degC (sub-cooled liquid)
+        load_profile: constant
+  condensate_surge_tank_combiner:
+    performance_model:
+      model: CondensateSurgeTankCombinerPerformance
+    model_inputs:
+      performance_parameters:
+        commodity: steam
+        in_streams: 2
+        tank_pressure: 1.05  # bar
+        heat_loss_fraction: 0.0
+  water_feedstock:
+    performance_model:
+      model: FeedstockPerformanceModel
+    cost_model:
+      model: FeedstockCostModel
+    model_inputs:
+      shared_parameters:
+        commodity: water
+        commodity_rate_units: kg/h
+      performance_parameters:
+        rated_capacity: 1000.0  # kg/h supply capacity
+      cost_parameters:
+        cost_year: 2022
+        commodity_amount_units: kg
+        price: 0.001  # USD/kg (~1 USD/tonne)
+        annual_cost: 0.0
+        start_up_cost: 0.0
+  water_pipe:
+    performance_model:
+      model: GenericTransporterPerformanceModel
+    model_inputs:
+      shared_parameters:
+        commodity: water
+        commodity_rate_units: kg/h
+  makeup_water_intake:
+    performance_model:
+      model: MakeupWaterIntake
+    cost_model:
+      model: SteamRecoveryCostModel
+    model_inputs:
+      performance_parameters:
+        vent_fraction: 0.001  # deaerator vent as a fraction of feedwater
+        blowdown_fraction: 0.01  # boiler blowdown as a fraction of feedwater
+        makeup_temperature: 15.0  # degC
+        makeup_pressure: 1.05  # bar (matches the surge tank)
+      cost_parameters:
+        cost_year: 2022
+        capex: 100000.0  # USD
+        opex: 5000.0  # USD/year
+  cst_pump:
+    performance_model:
+      model: WaterPumpPerformance
+    model_inputs:
+      performance_parameters:
+        discharge_pressure: 2.0  # bar (feeds the deaerator)
+        pump_efficiency: 0.7
+        motor_efficiency: 0.9
+  deaerator:
+    performance_model:
+      model: DeaeratorPerformance
+    model_inputs:
+      performance_parameters:
+        da_pressure: 1.36  # bar
+        steam_supply_pressure: 11.36  # bar
+        steam_supply_quality: 1.0
+        vent_rate_fraction: 0.001
+  bfw_pump:
+    performance_model:
+      model: WaterPumpPerformance
+    model_inputs:
+      performance_parameters:
+        discharge_pressure: 45.0  # bar (boiler inlet)
+        pump_efficiency: 0.75
+        motor_efficiency: 0.92
+  boiler_feedwater_sink:
+    performance_model:
+      model: SteamWaterStreamSink
+    model_inputs:
+      performance_parameters: {}

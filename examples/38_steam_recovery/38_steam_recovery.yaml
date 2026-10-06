@@ -1,0 +1,11 @@
+name: H2Integrate_config
+system_summary: >
+  Steam recovery loop for a fired-boiler plant. Returning HP and LP condensate is
+  collected in a condensate surge tank, topped up with make-up water, pumped,
+  deaerated, and delivered as boiler feedwater. Make-up water is supplied by a
+  ``water`` feedstock; the ``makeup_water_intake`` computes how much make-up water
+  is needed at each time step (to replace deaerator vent + boiler blowdown losses)
+  and exposes it as a ``water_consumed`` demand that the feedstock supplies and prices.
+driver_config: driver_config.yaml
+technology_config: tech_config.yaml
+plant_config: plant_config.yaml
