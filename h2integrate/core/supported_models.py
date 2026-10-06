@@ -172,10 +172,9 @@ supported_models = _ModelRegistry(
         "GenericSplitterPerformanceModel": "transporters:GenericSplitterPerformanceModel",
         "GenericTransporterPerformanceModel": "transporters:GenericTransporterPerformanceModel",
         "LinearDistanceCostModel": "transporters:LinearDistanceCostModel",
+        "LinearMassTransportCostModel": "transporters:LinearMassTransportCostModel",
         "IronTransportPerformanceComponent": "converters.iron:IronTransportPerformanceComponent",
         "IronTransportCostComponent": "converters.iron:IronTransportCostComponent",
-        # Simple Summers
-        "GenericSummerPerformanceModel": "transporters:GenericSummerPerformanceModel",
         # Storage
         "PySAMBatteryPerformanceModel": "storage.battery:PySAMBatteryPerformanceModel",
         "StoragePerformanceModel": "storage:StoragePerformanceModel",
@@ -187,6 +186,8 @@ supported_models = _ModelRegistry(
         "PipeStorageCostModel": "storage.hydrogen:PipeStorageCostModel",
         "ATBBatteryCostModel": "storage.battery:ATBBatteryCostModel",
         "GenericStorageCostModel": "storage:GenericStorageCostModel",
+        "ETESPerformanceModel": "storage.heat.etes:ETESPerformanceModel",
+        "ETESCostModel": "storage.heat.etes_cost_model:ETESCostModel",
         # Control
         "SimpleStorageOpenLoopController": "control.control_strategies.storage:SimpleStorageOpenLoopController",
         "DemandOpenLoopStorageController": "control.control_strategies.storage:DemandOpenLoopStorageController",
