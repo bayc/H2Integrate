@@ -3391,3 +3391,90 @@ def test_data_center_example(subtests, temp_copy_of_example):
     with subtests.test("PUE/WUE model: LCOC"):
         lcoc = h2i.prob.get_val("finance_subgroup_compute_load.LCOC", units="USD/(MW*h)")[0]
         assert lcoc == pytest.approx(169.44705064238948, rel=1e-6)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "example_folder,resource_example_folder", [("39_datacenter_waste_heat_direct", None)]
+)
+def test_datacenter_waste_heat_direct_example(subtests, temp_copy_of_example):
+    example_folder = temp_copy_of_example
+
+    h2i = H2IntegrateModel(example_folder / "datacenter_waste_heat_direct.yaml")
+    h2i.setup()
+    h2i.run()
+
+    # 100 MW IT * PUE 1.4 = 140 MW facility power; case 5 recovers 20% -> 28 MW
+    waste_heat_MWh = 140.0 * 0.20 * 8760
+
+    with subtests.test("Waste heat recovered"):
+        waste_heat = h2i.prob.get_val("data_center.total_waste_heat_recovered", units="MW*h")[0]
+        assert waste_heat == pytest.approx(waste_heat_MWh, rel=1e-6)
+
+    with subtests.test("Waste-heat supply temperature meets district-heating minimum"):
+        supply_temp = h2i.prob.get_val("district_heating.heat_supply_temp_C_in", units="degC")[0]
+        assert supply_temp == pytest.approx(40.0)
+        shortfall = h2i.prob.get_val("district_heating.temperature_shortfall_flag")[0]
+        assert shortfall == pytest.approx(0.0)
+
+    with subtests.test("District heating delivered and unmet heat"):
+        heat_out = h2i.prob.get_val("district_heating.heat_out", units="MW").sum()
+        unmet = h2i.prob.get_val("district_heating.unmet_heat_demand_out", units="MW").sum()
+        assert heat_out == pytest.approx(waste_heat_MWh, rel=1e-6)
+        # 30 MW demand - 28 MW supplied = 2 MW unmet every hour
+        assert unmet == pytest.approx(2.0 * 8760, rel=1e-6)
+
+    with subtests.test("Waste-heat sales credited against data center OpEx"):
+        opex = h2i.prob.get_val("data_center.OpEx", units="USD/year")[0]
+        # fixed O&M 1.5e5 $/MW/yr * 100 MW, less 25 $/MWh * waste heat
+        assert opex == pytest.approx(1.5e5 * 100 - 25.0 * waste_heat_MWh, rel=1e-6)
+
+    with subtests.test("LCOC"):
+        lcoc = h2i.prob.get_val("finance_subgroup_compute_load.LCOC", units="USD/(MW*h)")[0]
+        assert lcoc == pytest.approx(152.00672435404, rel=1e-6)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "example_folder,resource_example_folder", [("40_datacenter_waste_heat_heat_pump", None)]
+)
+def test_datacenter_waste_heat_heat_pump_example(subtests, temp_copy_of_example):
+    example_folder = temp_copy_of_example
+
+    h2i = H2IntegrateModel(example_folder / "datacenter_waste_heat_heat_pump.yaml")
+    h2i.setup()
+    h2i.run()
+
+    # Carnot COP = 0.5 * (75 + 273.15) / (75 - 28)
+    cop = 0.5 * (75.0 + 273.15) / (75.0 - 28.0)
+
+    with subtests.test("Waste heat recovered"):
+        # 140 MW facility power * 6% recoverable (case 9)
+        waste_heat = h2i.prob.get_val("data_center.total_waste_heat_recovered", units="MW*h")[0]
+        assert waste_heat == pytest.approx(140.0 * 0.06 * 8760, rel=1e-6)
+
+    with subtests.test("Heat pump COP"):
+        cop_actual = h2i.prob.get_val("heat_pump.cop_actual")
+        assert cop_actual == pytest.approx(np.full(8760, cop), rel=1e-6)
+
+    with subtests.test("Heat pump output and electricity use"):
+        heat_out = h2i.prob.get_val("heat_pump.heat_out", units="MW").sum()
+        electricity = h2i.prob.get_val("heat_pump.electricity_used", units="MW").sum()
+        assert heat_out == pytest.approx(100799.80169191421, rel=1e-6)
+        assert electricity == pytest.approx(heat_out / cop, rel=1e-6)
+
+    with subtests.test("Heat pump grid purchase matches heat pump electricity use"):
+        grid_hp = h2i.prob.get_val("grid_buy_hp.electricity_out", units="MW").sum()
+        assert grid_hp == pytest.approx(electricity, rel=1e-6)
+
+    with subtests.test("District heating receives upgraded heat"):
+        supply_temp = h2i.prob.get_val("district_heating.heat_supply_temp_C_in", units="degC")[0]
+        assert supply_temp == pytest.approx(75.0)
+        dh_heat = h2i.prob.get_val("district_heating.heat_out", units="MW").sum()
+        dh_unmet = h2i.prob.get_val("district_heating.unmet_heat_demand_out", units="MW").sum()
+        assert dh_heat == pytest.approx(heat_out, rel=1e-6)
+        assert dh_heat + dh_unmet == pytest.approx(12.0 * 8760, rel=1e-6)
+
+    with subtests.test("LCOC"):
+        lcoc = h2i.prob.get_val("finance_subgroup_compute_load.LCOC", units="USD/(MW*h)")[0]
+        assert lcoc == pytest.approx(160.87756672434134, rel=1e-6)

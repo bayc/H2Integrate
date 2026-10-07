@@ -97,6 +97,52 @@ automatic selection to configurations valid for that size category: large-scale
 Unmet electricity and water demands are reported as `unmet_electricity_demand` and
 `unmet_water_demand`.
 
+### Waste Heat Recovery
+
+The PUE/WUE performance model also reports the recoverable waste heat as a fraction of total
+facility power:
+
+```{math}
+Q_{\text{waste}} = f_{\text{recoverable}} \times P_{\text{facility}}
+```
+
+The recoverable fraction and the waste-heat supply and return temperatures default to
+literature-based values for each cooling configuration:
+
+| Case | Recoverable fraction | Supply temp (°C) | Return temp (°C) |
+| --- | --- | --- | --- |
+| 1 | 0.10 | 30 | 20 |
+| 2 | 0.15 | 35 | 25 |
+| 3 | 0.10 | 30 | 20 |
+| 4 | 0.15 | 35 | 25 |
+| 5 | 0.20 | 40 | 30 |
+| 6 | 0.08 | 28 | 20 |
+| 7 | 0.08 | 30 | 20 |
+| 8 | 0.12 | 35 | 25 |
+| 9 | 0.06 | 28 | 20 |
+| 10 | 0.05 | 30 | 22 |
+| 11 | 0.45 | 45 | 35 |
+| 12 | 0.55 | 50 | 40 |
+
+Each value can be overridden with `waste_heat_recoverable_fraction`,
+`waste_heat_supply_temp_C`, and `waste_heat_return_temp_C`. If the cooling configuration is
+neither set nor determined from the climate zone (for example, when `pue` and `wue` are
+provided directly), all three overrides must be provided.
+
+The outputs `waste_heat_out` (MW), `waste_heat_supply_temp_C`, `waste_heat_return_temp_C`,
+`total_waste_heat_recovered`, and `annual_waste_heat_recovered` can be connected to
+downstream heat consumers, such as a [heat pump](heat_pump.md) or a
+[district heating demand](../demand/demand_components.md), for example:
+
+```yaml
+technology_interconnections:
+  - [data_center, district_heating, [waste_heat_out, heat_in]]
+  - [data_center, district_heating, [waste_heat_supply_temp_C, heat_supply_temp_C_in]]
+```
+
+See `examples/39_datacenter_waste_heat_direct/` and
+`examples/40_datacenter_waste_heat_heat_pump/`.
+
 ### Cost
 
 `DataCenterPUEWUECostModel` calculates:
@@ -105,6 +151,8 @@ Unmet electricity and water demands are reported as `unmet_electricity_demand` a
 - Fixed OpEx: `fixed_opex_per_mw_per_year` $\times$ `system_capacity_mw`
 - Electricity cost: `electricity_rate` $\times$ total facility energy (kWh)
 - Water cost: `water_rate` $\times$ total water consumed (gal)
+- Waste-heat revenue (subtracted from OpEx): `waste_heat_sale_price_usd_per_mwh` $\times$
+  total recoverable waste heat (MWh). Defaults to 0.
 
 If electricity and water are purchased through separate technologies (for example, a grid
 model and a water feedstock), set `electricity_rate` and `water_rate` to zero to avoid

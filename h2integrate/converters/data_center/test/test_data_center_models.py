@@ -345,3 +345,93 @@ class TestDataCenterPUEWUECost:
         # water = 100 galUS/h * 24 h * 0.005 = 12
         opex = float(prob.get_val("OpEx", units="USD/year")[0])
         assert opex == pytest.approx(100_000.0 + 1_680.0 + 12.0)
+
+
+@pytest.mark.unit
+class TestDataCenterPUEWUEWasteHeat:
+    def test_case5_defaults(self):
+        """Case 5 (midsize water-cooled): fraction 0.20, T_supply=40, T_return=30."""
+        plant_config = _pue_wue_plant_config()
+        prob = _build_pue_wue_perf(plant_config, _pue_wue_perf_config())
+        prob.run_model()
+
+        facility_power = prob.get_val("total_facility_power", units="MW")
+        expected_waste = facility_power * 0.20
+        assert prob.get_val("waste_heat_out", units="MW") == pytest.approx(expected_waste)
+        assert prob.get_val("waste_heat_supply_temp_C", units="degC")[0] == pytest.approx(40.0)
+        assert prob.get_val("waste_heat_return_temp_C", units="degC")[0] == pytest.approx(30.0)
+        total = float(prob.get_val("total_waste_heat_recovered", units="MW*h")[0])
+        # 1.4 MW * 0.20 * 24 h = 6.72 MWh
+        assert total == pytest.approx(6.72)
+
+    def test_case9_defaults(self):
+        """Case 9 (small air-cooled): fraction 0.06, T_supply=28, T_return=20."""
+        plant_config = _pue_wue_plant_config()
+        prob = _build_pue_wue_perf(plant_config, _pue_wue_perf_config(cooling_configuration=9))
+        prob.run_model()
+
+        facility_power = prob.get_val("total_facility_power", units="MW")
+        assert prob.get_val("waste_heat_out", units="MW") == pytest.approx(facility_power * 0.06)
+        assert prob.get_val("waste_heat_supply_temp_C", units="degC")[0] == pytest.approx(28.0)
+
+    def test_user_overrides(self):
+        """User-supplied override fields take precedence over per-case defaults."""
+        plant_config = _pue_wue_plant_config()
+        prob = _build_pue_wue_perf(
+            plant_config,
+            _pue_wue_perf_config(
+                waste_heat_recoverable_fraction=0.33,
+                waste_heat_supply_temp_C=55.0,
+                waste_heat_return_temp_C=40.0,
+            ),
+        )
+        prob.run_model()
+
+        facility_power = prob.get_val("total_facility_power", units="MW")
+        assert prob.get_val("waste_heat_out", units="MW") == pytest.approx(facility_power * 0.33)
+        assert prob.get_val("waste_heat_supply_temp_C", units="degC")[0] == pytest.approx(55.0)
+        assert prob.get_val("waste_heat_return_temp_C", units="degC")[0] == pytest.approx(40.0)
+
+    def test_missing_config_raises(self):
+        """Without cooling_configuration or full overrides, setup should raise."""
+        plant_config = _pue_wue_plant_config()
+        comp = DataCenterPUEWUEPerformanceModel(
+            plant_config=plant_config,
+            tech_config=_pue_wue_perf_config(cooling_configuration=None),
+        )
+        with pytest.raises(ValueError, match="waste-heat"):
+            comp.setup()
+
+
+@pytest.mark.unit
+class TestDataCenterPUEWUECostCredit:
+    def _build_cost(self, tech_config):
+        prob = om.Problem()
+        prob.model.add_subsystem(
+            "dc_cost",
+            DataCenterPUEWUECostModel(
+                plant_config=_pue_wue_plant_config(), tech_config=tech_config
+            ),
+            promotes=["*"],
+        )
+        prob.setup()
+        prob.set_val("total_facility_power", np.full(24, 1.4), units="MW")
+        prob.set_val("water_consumed", np.zeros(24), units="galUS/h")
+        prob.set_val("waste_heat_out", np.full(24, 0.28), units="MW")
+        return prob
+
+    def test_no_credit_when_price_zero(self):
+        prob = self._build_cost(_pue_wue_cost_config())
+        prob.run_model()
+
+        # fixed_om = 100e3; electricity_cost = 1.4 MW * 24 h * 1000 kW/MW * 0.05 = 1680
+        opex = float(prob.get_val("OpEx", units="USD/year")[0])
+        assert opex == pytest.approx(100_000.0 + 1_680.0)
+
+    def test_waste_heat_credit_reduces_opex(self):
+        prob = self._build_cost(_pue_wue_cost_config(waste_heat_sale_price_usd_per_mwh=10.0))
+        prob.run_model()
+
+        # Waste-heat revenue = 10 $/MWh * (0.28 MW * 24 h) = 67.2
+        opex = float(prob.get_val("OpEx", units="USD/year")[0])
+        assert opex == pytest.approx(100_000.0 + 1_680.0 - 67.2)

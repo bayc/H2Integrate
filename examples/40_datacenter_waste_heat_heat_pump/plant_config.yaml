@@ -1,0 +1,57 @@
+name: plant_config
+description: >
+  Air-cooled data center (low-grade waste heat) whose recovered heat is
+  upgraded by an electric heat pump before being delivered to a district-
+  heating loop. Uses the PUE/WUE performance model with an air-cooled cooling
+  configuration whose recovered temperature is below the DH loop's minimum,
+  making the heat pump necessary.
+sites:
+  site:
+    latitude: 46.7867
+    longitude: -92.1005
+technology_interconnections:
+  - [data_center, grid_buy, [unmet_electricity_demand, electricity_set_point]]
+  - [water_feedstock, data_center, water, pipe]
+  - [data_center, heat_pump, [waste_heat_out, heat_in]]
+  - [data_center, heat_pump, [waste_heat_supply_temp_C, heat_supply_temp_C_in]]
+  - [grid_buy_hp, heat_pump, electricity, cable]
+  - [heat_pump, grid_buy_hp, [electricity_demand, electricity_set_point]]
+  - [heat_pump, district_heating, heat, heat_transport]
+  - [heat_pump, district_heating, [heat_supply_temp_C, heat_supply_temp_C_in]]
+plant:
+  plant_life: 15
+  simulation:
+    n_timesteps: 8760
+finance_parameters:
+  finance_groups:
+    profast_model:
+      finance_model: ProFastLCO
+      model_inputs:
+        params:
+          analysis_start_year: 2032
+          installation_time: 36
+          inflation_rate: 0.0
+          discount_rate: 0.09
+          debt_equity_ratio: 0.93
+          property_tax_and_insurance: 0.03
+          total_income_tax_rate: 0.21
+          capital_gains_tax_rate: 0.15
+          sales_tax_rate: 0.0
+          debt_interest_rate: 0.07
+          debt_type: Revolving debt
+          loan_period_if_used: 0
+          cash_onhand_months: 1
+          admin_expense: 0.00
+        capital_items:
+          depr_type: MACRS
+          depr_period: 5
+          refurb: [0.]
+  cost_adjustment_parameters:
+    cost_year_adjustment_inflation: 0.025
+    target_dollar_year: 2026
+  finance_subgroups:
+    compute_load:
+      commodity: compute_load
+      commodity_stream: data_center
+      finance_groups: [profast_model]
+      technologies: [data_center, grid_buy, water_feedstock, heat_pump, district_heating, grid_buy_hp]

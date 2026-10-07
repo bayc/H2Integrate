@@ -1,0 +1,7 @@
+name: H2Integrate_config
+system_summary: >
+  Grid-connected water-cooled data center whose recovered waste heat is
+  delivered directly to a district-heating loop.
+driver_config: driver_config.yaml
+technology_config: tech_config.yaml
+plant_config: plant_config.yaml

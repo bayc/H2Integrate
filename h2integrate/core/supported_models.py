@@ -146,6 +146,8 @@ supported_models = _ModelRegistry(
         "DataCenterCostModel": "converters.data_center:DataCenterCostModel",
         "DataCenterPUEWUEPerformanceModel": "converters.data_center:DataCenterPUEWUEPerformanceModel",
         "DataCenterPUEWUECostModel": "converters.data_center:DataCenterPUEWUECostModel",
+        "HeatPumpPerformanceModel": "converters.heat:HeatPumpPerformanceModel",
+        "HeatPumpCostModel": "converters.heat:HeatPumpCostModel",
         "PaperMillPerformanceModel": "converters.paper_mill:PaperMillPerformanceModel",
         "PaperMillCostModel": "converters.paper_mill:PaperMillCostModel",
         "SAFPerformanceModel": "converters.saf:SAFPerformanceModel",
@@ -183,6 +185,8 @@ supported_models = _ModelRegistry(
         "OptimizedDispatchStorageController": "control.control_strategies.storage:OptimizedDispatchStorageController",
         "GenericDemandComponent": "demand:GenericDemandComponent",
         "FlexibleDemandComponent": "demand:FlexibleDemandComponent",
+        "DistrictHeatingDemand": "demand:DistrictHeatingDemand",
+        "DistrictHeatingDemandCostModel": "demand:DistrictHeatingDemandCostModel",
         "PLMHeuristicOpenLoopConverterController": "control.control_strategies.converters:PLMHeuristicOpenLoopConverterController",
         # Dispatch
         "PyomoDispatchGenericConverter": "control.control_rules.converters:PyomoDispatchGenericConverter",

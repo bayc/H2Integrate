@@ -2,9 +2,10 @@
 
 Demand components define rule-based logic for meeting commodity demand profiles without using dynamic system feedback. These components operate independently at each timestep.
 
-This page documents two core demand types:
+This page documents three demand types:
 1. [`GenericDemandComponent`](#generic-demand-component) — meets a fixed demand profile.
 2. [`FlexibleDemandComponent`](#flexible-demand-component) — adjusts demand up or down within flexible bounds.
+3. [`DistrictHeatingDemand`](#district-heating-demand-component) — meets a heat demand profile only when the supply temperature is high enough.
 
 
 (demand-component-inputs-and-outputs)=
@@ -107,3 +108,58 @@ model_inputs:
     ramp_up_rate_fraction: 0.5
     min_utilization: 0
 ```
+
+(district-heating-demand-component)=
+### District Heating Demand Component
+The `DistrictHeatingDemand` component behaves like the `GenericDemandComponent` for the `heat`
+commodity, and also checks the incoming supply temperature (`heat_supply_temp_C_in`) against
+the minimum supply temperature of the district-heating loop (`min_supply_temp_C`). When
+`strict_temperature` is `true` (the default), heat supplied below the minimum temperature is
+rejected: `heat_out` is zero and the full demand is reported as unmet.
+
+In addition to the standard demand outputs, the component reports:
+- `temperature_shortfall_flag`: 1 if the supply temperature is below the minimum, otherwise 0
+- `temperature_shortfall_hours`: simulated hours during which the supply temperature is below the minimum
+
+The companion `DistrictHeatingDemandCostModel` calculates CapEx and fixed OpEx per MW of
+connected thermal capacity, plus a variable OpEx per MWh of delivered heat.
+
+#### Configuration
+
+| Field                           | Type           | Description                                                         |
+| ------------------------------- | -------------- | ------------------------------------------------------------------- |
+| `commodity`                     | `str`          | Commodity name; use `heat`.                                         |
+| `commodity_rate_units`          | `str`          | Units of the demand profile (e.g., `MW`).                           |
+| `demand_profile`                | scalar or list | Timeseries or constant heat demand.                                 |
+| `min_supply_temp_C`             | float          | Minimum acceptable supply temperature in degC.                      |
+| `system_capacity_mw_th`         | float          | Connected thermal capacity in MW.                                   |
+| `strict_temperature`            | bool           | Reject heat supplied below `min_supply_temp_C`. Defaults to `true`. |
+| `capex_per_mw_th`               | float          | Capital cost per MW of connected thermal capacity (cost model).     |
+| `fixed_opex_per_mw_th_per_year` | float          | Fixed O&M per MW of connected thermal capacity (cost model).        |
+| `variable_opex_per_mwh_th`      | float          | Variable O&M per delivered MWh (cost model). Defaults to 0.         |
+
+```yaml
+district_heating:
+  performance_model:
+    model: DistrictHeatingDemand
+  cost_model:
+    model: DistrictHeatingDemandCostModel
+  model_inputs:
+    shared_parameters:
+      system_capacity_mw_th: 40.0
+    performance_parameters:
+      commodity: heat
+      commodity_rate_units: MW
+      demand_profile: 30.0
+      min_supply_temp_C: 35.0
+      strict_temperature: true
+    cost_parameters:
+      cost_year: 2026
+      capex_per_mw_th: 5.0e+5
+      fixed_opex_per_mw_th_per_year: 1.5e+4
+      variable_opex_per_mwh_th: 0.5
+```
+
+For examples of how to use the `DistrictHeatingDemand` component, see the following:
+- `examples/39_datacenter_waste_heat_direct`
+- `examples/40_datacenter_waste_heat_heat_pump`
