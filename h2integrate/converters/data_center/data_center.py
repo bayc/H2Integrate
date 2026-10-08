@@ -7,12 +7,12 @@ import eeweather
 from attrs import field, define, validators
 
 from h2integrate.core.utilities import BaseConfig, merge_shared_inputs
-from h2integrate.core.supported_models import register
 from h2integrate.core.model_baseclass import (
     CostModelBaseClass,
     CostModelBaseConfig,
     PerformanceModelBaseClass,
 )
+from h2integrate.core.supported_models import register
 
 
 @define(kw_only=True)
@@ -415,9 +415,9 @@ class DataCenterPUEWUEPerformanceModelConfig(BaseConfig):
     #   - Ebrahimi, Jones, Fleischer, "A review of data center cooling technology,
     #     operating conditions and the corresponding low-grade waste heat
     #     recovery opportunities", RSER 31 (2014) 622-638.
-    #   - Wahlroos, Parssinen, Rinne, Syri, Manner, "Utilizing data center waste
-    #     heat in district heating - Impacts on energy efficiency and prospects
-    #     for low-temperature DH networks", Energy 140 (2017) 1228-1238.
+    #   - Wahlroos, Parssinen, Manner, Syri, "Utilizing data center waste heat in
+    #     district heating - Impacts on energy efficiency and prospects for
+    #     low-temperature district heating networks", Energy 140 (2017) 1228-1238.
     #   - Huang, Copertaro, Zhang, et al., "A review of data centers as prosumers
     #     in district energy systems: Renewable energy integration and waste
     #     heat reuse for district heating", Applied Energy 258 (2020) 114109.
@@ -442,9 +442,9 @@ class DataCenterPUEWUEPerformanceModelConfig(BaseConfig):
         # Direct-to-chip liquid cooling. Warm-water loops in direct contact
         # with the chips reject heat at 45-55 C, so a much larger fraction of
         # the IT power is captured as high-grade heat than in cases 1-10.
-        # Refs: Ellsworth et al., "Warm liquid cooling at 45 C", IEEE
-        # ITHERM 2012; Iyengar et al., "Server liquid cooling with chiller-less
-        # data center design", IBM J. Res. Dev. 55.5 (2011); Zimmermann et al.,
+        # Refs: Iyengar et al., "Server liquid cooling with chiller-less data
+        # center design to enable significant energy savings", IEEE SEMI-THERM
+        # 2012, 212-223; Zimmermann et al.,
         # "Aquasar: A hot water cooled data center with direct energy reuse",
         # Energy 43 (2012) 237-245.
         11: {"recoverable_fraction": 0.45, "supply_temp_C": 45.0, "return_temp_C": 35.0},

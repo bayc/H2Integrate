@@ -124,6 +124,23 @@ literature-based values for each cooling configuration:
 | 11 | 0.45 | 45 | 35 |
 | 12 | 0.55 | 50 | 40 |
 
+These defaults are order-of-magnitude estimates informed by the literature:
+
+- **Air-cooled, chiller-based, and direct-expansion configurations (cases 1-10):** recover
+  5-20% of facility power at 28-40 °C. Water-cooled loops reject heat at higher
+  temperatures and recover more than air-cooled or direct-expansion systems. Small
+  facilities generally recover less because their piping is more distributed. These values
+  are based on reviews of data center cooling technology, low-grade waste heat recovery,
+  and data center waste heat reuse in district heating
+  [^ebrahimi2014] [^wahlroos2017] [^huang2020].
+- **Direct-to-chip liquid cooling (cases 11-12):** recovers 45-55% of facility power at
+  45-50 °C. Warm-water loops in direct contact with the chips capture a much larger share of
+  IT power as higher-grade heat. These values are based on measurements of hot-water-cooled
+  and chiller-less liquid-cooled data centers [^zimmermann2012] [^iyengar2012].
+
+The supply temperatures in cases 1-10 are generally too low for conventional district
+heating networks, so the heat is typically upgraded with a [heat pump](heat_pump.md).
+
 Each value can be overridden with `waste_heat_recoverable_fraction`,
 `waste_heat_supply_temp_C`, and `waste_heat_return_temp_C`. If the cooling configuration is
 neither set nor determined from the climate zone (for example, when `pue` and `wue` are
@@ -161,3 +178,27 @@ counting those costs twice.
 [^lei2022]: Lei, N., and Masanet, E. "Climate- and technology-specific PUE and WUE
 estimations for U.S. data centers using a hybrid statistical and thermodynamics-based
 approach." *Resources, Conservation and Recycling* 182 (2022): 106323.
+
+[^ebrahimi2014]: Ebrahimi, K., Jones, G. F., and Fleischer, A. S. "A review of data center
+cooling technology, operating conditions and the corresponding low-grade waste heat recovery
+opportunities." *Renewable and Sustainable Energy Reviews* 31 (2014): 622-638.
+https://doi.org/10.1016/j.rser.2013.12.007
+
+[^wahlroos2017]: Wahlroos, M., Pärssinen, M., Manner, J., and Syri, S. "Utilizing data center
+waste heat in district heating - Impacts on energy efficiency and prospects for
+low-temperature district heating networks." *Energy* 140 (2017): 1228-1238.
+https://doi.org/10.1016/j.energy.2017.08.078
+
+[^huang2020]: Huang, P., Copertaro, B., Zhang, X., et al. "A review of data centers as
+prosumers in district energy systems: Renewable energy integration and waste heat reuse for
+district heating." *Applied Energy* 258 (2020): 114109.
+https://doi.org/10.1016/j.apenergy.2019.114109
+
+[^zimmermann2012]: Zimmermann, S., Meijer, I., Tiwari, M. K., Paredes, S., Michel, B., and
+Poulikakos, D. "Aquasar: A hot water cooled data center with direct energy reuse."
+*Energy* 43 (2012): 237-245. https://doi.org/10.1016/j.energy.2012.04.037
+
+[^iyengar2012]: Iyengar, M., David, M., Parida, P., et al. "Server liquid cooling with
+chiller-less data center design to enable significant energy savings." In *2012 28th Annual
+IEEE Semiconductor Thermal Measurement and Management Symposium (SEMI-THERM)* (2012):
+212-223. https://doi.org/10.1109/STHERM.2012.6188851
