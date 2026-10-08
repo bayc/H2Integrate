@@ -22,6 +22,7 @@ from h2integrate.core.model_baseclass import (
     CostModelBaseConfig,
     PerformanceModelBaseClass,
 )
+from h2integrate.core.supported_models import register
 
 
 # Absolute lower/upper clamps on COP used to keep the compute step numerically
@@ -85,6 +86,7 @@ class HeatPumpPerformanceModelConfig(BaseConfig):
                 raise ValueError("'carnot_efficiency' must be in the interval (0, 1].")
 
 
+@register
 class HeatPumpPerformanceModel(PerformanceModelBaseClass):
     """Heat-pump performance model.
 
@@ -465,6 +467,7 @@ class HeatPumpCostModelConfig(CostModelBaseConfig):
     )
 
 
+@register
 class HeatPumpCostModel(CostModelBaseClass):
     """Cost model for a heat pump plus its off-taker interconnection.
 

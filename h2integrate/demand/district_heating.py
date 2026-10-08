@@ -13,6 +13,7 @@ from attrs import field, define, validators
 from h2integrate.core.utilities import merge_shared_inputs
 from h2integrate.core.model_baseclass import CostModelBaseClass, CostModelBaseConfig
 from h2integrate.demand.demand_baseclass import DemandComponentBase, DemandComponentBaseConfig
+from h2integrate.core.supported_models import register
 
 
 @define(kw_only=True)
@@ -34,6 +35,7 @@ class DistrictHeatingDemandConfig(DemandComponentBaseConfig):
     strict_temperature: bool = field(default=True)
 
 
+@register
 class DistrictHeatingDemand(DemandComponentBase):
     """District-heating heat consumer with a supply-temperature check.
 
@@ -128,6 +130,7 @@ class DistrictHeatingDemandCostModelConfig(CostModelBaseConfig):
     variable_opex_per_mwh_th: float = field(default=0.0, validator=validators.ge(0))
 
 
+@register
 class DistrictHeatingDemandCostModel(CostModelBaseClass):
     """Simple CapEx/OpEx cost model for a district-heating heat consumer."""
 
