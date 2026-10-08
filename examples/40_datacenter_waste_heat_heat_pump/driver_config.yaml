@@ -1,0 +1,4 @@
+name: driver_config
+description: Data center waste-heat recovery to district heating via heat pump
+general:
+  folder_output: outputs

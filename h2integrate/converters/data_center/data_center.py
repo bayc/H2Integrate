@@ -341,6 +341,13 @@ class DataCenterPUEWUEPerformanceModelConfig(BaseConfig):
             center. Defaults to None, which selects the configuration automatically.
         optimize_for (str, optional): Optimization target, either "pue" or "wue". Defaults to "pue".
         size_sqft (float, optional): Size of the data center in square feet. Defaults to None.
+        waste_heat_recoverable_fraction (float, optional): Fraction of total facility power
+            recoverable as usable waste heat. Defaults to None, which uses the value for the
+            cooling configuration in ``WASTE_HEAT_RECOVERY_DEFAULTS``.
+        waste_heat_supply_temp_C (float, optional): Waste-heat supply temperature in degC.
+            Defaults to None, which uses the cooling-configuration default.
+        waste_heat_return_temp_C (float, optional): Waste-heat return temperature in degC.
+            Defaults to None, which uses the cooling-configuration default.
     """
 
     compute_it_workload_profile: int | float | list = field()
@@ -352,6 +359,13 @@ class DataCenterPUEWUEPerformanceModelConfig(BaseConfig):
     cooling_configuration: int = field(default=None)
     optimize_for: str = field(default="pue")
     size_sqft: float = field(default=None)
+
+    # Optional user overrides for waste-heat outputs. When any of these is None the
+    # value is looked up from `WASTE_HEAT_RECOVERY_DEFAULTS` using the resolved
+    # cooling configuration case.
+    waste_heat_recoverable_fraction: float = field(default=None)
+    waste_heat_supply_temp_C: float = field(default=None)
+    waste_heat_return_temp_C: float = field(default=None)
 
     # Mapping of cooling configuration integer to description
     COOLING_CONFIGURATIONS: ClassVar[dict[int, str]] = {
@@ -368,7 +382,8 @@ class DataCenterPUEWUEPerformanceModelConfig(BaseConfig):
         # Direct-to-chip liquid cooling variants. "Air-cooled" here refers to the
         # heat-reject side (dry cooler); "water-cooled" uses a water-cooled
         # chiller / cooling tower. In both cases the primary ITE loop is warm
-        # water in direct contact with the chip cold plates.
+        # water in direct contact with the chip cold plates, which enables
+        # substantially higher waste-heat recovery than any of cases 1-10.
         11: (
             "Liquid-cooled DC; Direct-to-chip liquid loop + dry cooling + adiabatic cooling"
             " + (air-cooled chiller)"
@@ -391,6 +406,50 @@ class DataCenterPUEWUEPerformanceModelConfig(BaseConfig):
     # Square-footage thresholds for size classification
     LARGE_SQFT_THRESHOLD = 20_000
     SMALL_SQFT_THRESHOLD = 1_000
+
+    # Default waste-heat recovery parameters per cooling configuration case.
+    #
+    # `recoverable_fraction` is the fraction of total facility power that can be
+    # recovered as usable thermal energy at the given supply temperature. Values
+    # are order-of-magnitude estimates informed by:
+    #   - Ebrahimi, Jones, Fleischer, "A review of data center cooling technology,
+    #     operating conditions and the corresponding low-grade waste heat
+    #     recovery opportunities", RSER 31 (2014) 622-638.
+    #   - Wahlroos, Parssinen, Manner, Syri, "Utilizing data center waste heat in
+    #     district heating - Impacts on energy efficiency and prospects for
+    #     low-temperature district heating networks", Energy 140 (2017) 1228-1238.
+    #   - Huang, Copertaro, Zhang, et al., "A review of data centers as prosumers
+    #     in district energy systems: Renewable energy integration and waste
+    #     heat reuse for district heating", Applied Energy 258 (2020) 114109.
+    #
+    # Water-cooled loops reject heat at higher temperatures with higher recovery
+    # fractions than air-cooled or direct-expansion configurations, and small
+    # facilities generally recover a smaller share due to distributed piping.
+    WASTE_HEAT_RECOVERY_DEFAULTS: ClassVar[dict[int, dict[str, float]]] = {
+        # Large-scale DC (> 20,000 sqft)
+        1: {"recoverable_fraction": 0.10, "supply_temp_C": 30.0, "return_temp_C": 20.0},
+        2: {"recoverable_fraction": 0.15, "supply_temp_C": 35.0, "return_temp_C": 25.0},
+        # Midsize DC (1,000 - 20,000 sqft)
+        3: {"recoverable_fraction": 0.10, "supply_temp_C": 30.0, "return_temp_C": 20.0},
+        4: {"recoverable_fraction": 0.15, "supply_temp_C": 35.0, "return_temp_C": 25.0},
+        5: {"recoverable_fraction": 0.20, "supply_temp_C": 40.0, "return_temp_C": 30.0},
+        6: {"recoverable_fraction": 0.08, "supply_temp_C": 28.0, "return_temp_C": 20.0},
+        7: {"recoverable_fraction": 0.08, "supply_temp_C": 30.0, "return_temp_C": 20.0},
+        # Small DC (< 1,000 sqft)
+        8: {"recoverable_fraction": 0.12, "supply_temp_C": 35.0, "return_temp_C": 25.0},
+        9: {"recoverable_fraction": 0.06, "supply_temp_C": 28.0, "return_temp_C": 20.0},
+        10: {"recoverable_fraction": 0.05, "supply_temp_C": 30.0, "return_temp_C": 22.0},
+        # Direct-to-chip liquid cooling. Warm-water loops in direct contact
+        # with the chips reject heat at 45-55 C, so a much larger fraction of
+        # the IT power is captured as high-grade heat than in cases 1-10.
+        # Refs: Iyengar et al., "Server liquid cooling with chiller-less data
+        # center design to enable significant energy savings", IEEE SEMI-THERM
+        # 2012, 212-223; Zimmermann et al.,
+        # "Aquasar: A hot water cooled data center with direct energy reuse",
+        # Energy 43 (2012) 237-245.
+        11: {"recoverable_fraction": 0.45, "supply_temp_C": 45.0, "return_temp_C": 35.0},
+        12: {"recoverable_fraction": 0.55, "supply_temp_C": 50.0, "return_temp_C": 40.0},
+    }
 
     def __attrs_post_init__(self):
         # Check to see if the user has provided either PUE/WUE or climate zone (but not both).
@@ -476,7 +535,8 @@ class DataCenterPUEWUEPerformanceModel(PerformanceModelBaseClass):
 
         # When the user did not supply PUE/WUE directly, look them up from the
         # Lei & Masanet climate-zone dataset. When ``cooling_configuration`` is
-        # not set either, the auto-selected case is stored back on the config.
+        # not set either, the auto-selected case is stored back on the config
+        # so downstream logic (e.g. waste-heat parameter resolution) can use it.
         if self.config.pue is None:
             pue, wue, case_num = self.determine_pue_wue_by_climate_zone(
                 climate_zone=self.config.climate_zone,
@@ -571,6 +631,55 @@ class DataCenterPUEWUEPerformanceModel(PerformanceModelBaseClass):
             desc="Unmet water demand",
         )
 
+        # ------------------------------------------------------------------
+        # Waste-heat recovery outputs
+        # ------------------------------------------------------------------
+        # Recoverable-waste-heat rate (a fraction of total facility power) and
+        # its supply/return temperatures. Downstream heat-consuming techs
+        # (heat pump, district heating) can wire to these via
+        # `technology_interconnections` in the plant config.
+        (
+            self._waste_heat_recoverable_fraction,
+            self._waste_heat_supply_temp_C,
+            self._waste_heat_return_temp_C,
+        ) = self._resolve_waste_heat_params()
+
+        self.add_output(
+            "waste_heat_out",
+            val=0.0,
+            shape=n_timesteps,
+            units="MW",
+            desc="Recoverable waste-heat rate available for downstream use",
+        )
+
+        self.add_output(
+            "waste_heat_supply_temp_C",
+            val=self._waste_heat_supply_temp_C,
+            units="degC",
+            desc="Waste-heat supply (hot-side) temperature",
+        )
+
+        self.add_output(
+            "waste_heat_return_temp_C",
+            val=self._waste_heat_return_temp_C,
+            units="degC",
+            desc="Waste-heat return (cold-side) temperature",
+        )
+
+        self.add_output(
+            "total_waste_heat_recovered",
+            val=0.0,
+            units="MW*h",
+            desc="Total recoverable waste heat over the simulation",
+        )
+
+        self.add_output(
+            "annual_waste_heat_recovered",
+            val=0.0,
+            units="(MW*h)/year",
+            desc="Annualized recoverable waste heat",
+        )
+
     def compute(self, inputs, outputs, discrete_inputs=None, discrete_outputs=None):
         """
         Compute the total facility power and water consumption for the data center.
@@ -626,6 +735,18 @@ class DataCenterPUEWUEPerformanceModel(PerformanceModelBaseClass):
         outputs["unmet_electricity_demand"] = unmet_electricity
         outputs["unmet_water_demand"] = unmet_water
         outputs["compute_load_out"] = capped_it_workload
+
+        # Recoverable waste heat: a fraction of the total facility power leaves
+        # the site as usable heat at the resolved supply temperature. Both
+        # temperature outputs are constant across the simulation.
+        waste_heat = total_facility_power * self._waste_heat_recoverable_fraction
+        outputs["waste_heat_out"] = waste_heat
+        outputs["waste_heat_supply_temp_C"] = self._waste_heat_supply_temp_C
+        outputs["waste_heat_return_temp_C"] = self._waste_heat_return_temp_C
+        outputs["total_waste_heat_recovered"] = np.sum(waste_heat) * (self.dt / 3600)
+        outputs["annual_waste_heat_recovered"] = outputs["total_waste_heat_recovered"] * (
+            1 / self.fraction_of_year_simulated
+        )
 
         # Compute summary metrics using base-class standard output names
         outputs["total_compute_load_produced"] = np.sum(capped_it_workload) * (self.dt / 3600)
@@ -791,6 +912,62 @@ class DataCenterPUEWUEPerformanceModel(PerformanceModelBaseClass):
         best = min(matching_rows, key=lambda r: r[sort_index])
         return (best[1], best[2], best[0])
 
+    def _resolve_waste_heat_params(self):
+        """Resolve waste-heat recovery parameters from the config.
+
+        Returns a tuple ``(recoverable_fraction, supply_temp_C, return_temp_C)``
+        using the per-case defaults in
+        ``DataCenterPUEWUEPerformanceModelConfig.WASTE_HEAT_RECOVERY_DEFAULTS``, with
+        per-parameter user overrides applied when supplied via the
+        ``waste_heat_recoverable_fraction``, ``waste_heat_supply_temp_C``, and
+        ``waste_heat_return_temp_C`` config fields.
+
+        Raises:
+            ValueError: If ``cooling_configuration`` is not set and any of the
+                three waste-heat parameters is missing an override value.
+        """
+        overrides = {
+            "recoverable_fraction": self.config.waste_heat_recoverable_fraction,
+            "supply_temp_C": self.config.waste_heat_supply_temp_C,
+            "return_temp_C": self.config.waste_heat_return_temp_C,
+        }
+
+        # If the user supplied all three overrides, no case lookup is needed.
+        if all(v is not None for v in overrides.values()):
+            return (
+                overrides["recoverable_fraction"],
+                overrides["supply_temp_C"],
+                overrides["return_temp_C"],
+            )
+
+        # Otherwise we need a cooling configuration to look up defaults.
+        if self.config.cooling_configuration is None:
+            missing = [k for k, v in overrides.items() if v is None]
+            raise ValueError(
+                "Cannot resolve waste-heat parameters: cooling_configuration is not set "
+                f"and the following overrides are missing: {missing}. Either set "
+                "'cooling_configuration' (1-12) to use per-case literature defaults, "
+                "or supply all three of 'waste_heat_recoverable_fraction', "
+                "'waste_heat_supply_temp_C', and 'waste_heat_return_temp_C'."
+            )
+
+        if self.config.cooling_configuration not in self.config.WASTE_HEAT_RECOVERY_DEFAULTS:
+            raise ValueError(
+                f"cooling_configuration must be an integer from 1 to 12, "
+                f"got '{self.config.cooling_configuration}'."
+            )
+
+        defaults = self.config.WASTE_HEAT_RECOVERY_DEFAULTS[self.config.cooling_configuration]
+        resolved = {
+            key: (overrides[key] if overrides[key] is not None else defaults[key])
+            for key in ("recoverable_fraction", "supply_temp_C", "return_temp_C")
+        }
+        return (
+            resolved["recoverable_fraction"],
+            resolved["supply_temp_C"],
+            resolved["return_temp_C"],
+        )
+
 
 @define(kw_only=True)
 class DataCenterPUEWUECostModelConfig(CostModelBaseConfig):
@@ -803,6 +980,8 @@ class DataCenterPUEWUECostModelConfig(CostModelBaseConfig):
         capex_per_mw (float | int): Capital cost per MW of IT equipment capacity in USD/MW.
         fixed_opex_per_mw_per_year (float | int): Fixed annual O&M per MW of IT capacity in
             USD/(MW*year).
+        waste_heat_sale_price_usd_per_mwh (float, optional): Sale price for recoverable
+            waste heat in USD/MWh. Revenue is credited against OpEx. Defaults to 0.0.
     """
 
     electricity_rate: float = field(validator=validators.ge(0))
@@ -810,6 +989,10 @@ class DataCenterPUEWUECostModelConfig(CostModelBaseConfig):
     capex_per_mw: float | int = field(validator=validators.ge(0))
     fixed_opex_per_mw_per_year: float | int = field(validator=validators.ge(0))
     system_capacity_mw: float = field(validator=validators.gt(0))
+    # Optional sale price for recoverable waste heat delivered to downstream
+    # techs. When > 0, revenue = price * total_waste_heat_MWh is credited
+    # against OpEx.
+    waste_heat_sale_price_usd_per_mwh: float = field(default=0.0, validator=validators.ge(0))
 
 
 @register
@@ -902,6 +1085,21 @@ class DataCenterPUEWUECostModel(CostModelBaseClass):
             desc="Fixed annual O&M per MW of IT capacity",
         )
 
+        self.add_input(
+            "waste_heat_out",
+            val=0.0,
+            shape=n_timesteps,
+            units="MW",
+            desc="Recoverable waste-heat rate from performance model",
+        )
+
+        self.add_input(
+            "waste_heat_sale_price_usd_per_mwh",
+            val=self.config.waste_heat_sale_price_usd_per_mwh,
+            units="USD/(MW*h)",
+            desc="Sale price for delivered waste heat; credited against OpEx",
+        )
+
     def compute(self, inputs, outputs, discrete_inputs=None, discrete_outputs=None):
         """
         Compute capital and operating costs for the data center.
@@ -944,8 +1142,13 @@ class DataCenterPUEWUECostModel(CostModelBaseClass):
         # Calculate water costs
         water_cost = total_water_consumed_gal * water_rate
 
-        # Total variable operating expenses (energy and water)
-        variable_om = electricity_cost + water_cost
+        # Waste-heat sale revenue (credited against OpEx). Uses the recoverable
+        # heat profile written by the performance model.
+        waste_heat_MWh = inputs["waste_heat_out"].sum() * (dt / 3600)
+        waste_heat_revenue = inputs["waste_heat_sale_price_usd_per_mwh"] * waste_heat_MWh
+
+        # Total variable operating expenses (energy and water) net of waste-heat sales
+        variable_om = electricity_cost + water_cost - waste_heat_revenue
 
         # Total operating expenditure
         opex = fixed_om + variable_om

@@ -1,0 +1,121 @@
+name: technology_config
+description: >
+  Grid-connected air-cooled data center (PUE/WUE model, cooling case 9) whose
+  low-grade waste heat is upgraded by an electric heat pump (Carnot model)
+  before being delivered to a district-heating loop with a 70 C minimum
+  supply temperature.
+technologies:
+  heat_transport:
+    performance_model:
+      model: GenericTransporterPerformanceModel
+    model_inputs:
+      shared_parameters:
+        commodity: heat
+        commodity_rate_units: MW
+  water_feedstock:
+    performance_model:
+      model: FeedstockPerformanceModel
+    cost_model:
+      model: FeedstockCostModel
+    model_inputs:
+      shared_parameters:
+        commodity: water
+        commodity_rate_units: galUS/h
+      performance_parameters:
+        rated_capacity: 1.e+6  # galUS/h
+      cost_parameters:
+        cost_year: 2026
+        price: 0.01
+        annual_cost: 0.
+        start_up_cost: 0.
+  data_center:
+    performance_model:
+      model: DataCenterPUEWUEPerformanceModel
+    cost_model:
+      model: DataCenterPUEWUECostModel
+    model_inputs:
+      shared_parameters:
+        system_capacity_mw: 100.
+      performance_parameters:
+        compute_it_workload_profile: 100.0  # 100 MW IT workload
+        pue: 1.4
+        wue: 1.0
+        # Cooling case 9: small air-cooled facility. Recoverable fraction 0.06,
+        # supply 28 C, return 20 C (Ebrahimi 2014).
+        cooling_configuration: 9
+      cost_parameters:
+        cost_year: 2026
+        capex_per_mw: 4.0625e+6
+        fixed_opex_per_mw_per_year: 1.5e+5
+        # Electricity and water are purchased through grid_buy and water_feedstock,
+        # so the data center's own rates are zeroed to avoid double counting.
+        electricity_rate: 0.0  # $/kWh
+        water_rate: 0.0  # $/gal
+        # Waste heat is exchanged internally to the heat pump; no external
+        # sale, so keep the sale credit at zero.
+        waste_heat_sale_price_usd_per_mwh: 0.0
+  heat_pump:
+    performance_model:
+      model: HeatPumpPerformanceModel
+    cost_model:
+      model: HeatPumpCostModel
+    model_inputs:
+      shared_parameters:
+        system_capacity_mw_th: 15.0  # MW_th delivered heat capacity
+      performance_parameters:
+        hp_mode: carnot
+        delivery_temp_C: 75.0  # >= DH minimum supply temp
+        carnot_efficiency: 0.5  # fraction of Carnot COP achieved
+        min_source_temp_C: 5.0
+      cost_parameters:
+        cost_year: 2026
+        capex_per_mw_th: 8.0e+5
+        fixed_opex_per_mw_th_per_year: 2.0e+4
+        variable_opex_per_mwh_th: 1.0
+  grid_buy:
+    performance_model:
+      model: GridPerformanceModel
+    cost_model:
+      model: GridCostModel
+    model_inputs:
+      shared_parameters:
+        interconnection_size: 1.e+6  # kW
+      cost_parameters:
+        cost_year: 2026
+        electricity_buy_price: 0.04574
+        interconnection_capex_per_kw: 0.0
+        interconnection_opex_per_kw: 0.0
+        fixed_interconnection_cost: 0.0
+  grid_buy_hp:
+    performance_model:
+      model: GridPerformanceModel
+    cost_model:
+      model: GridCostModel
+    model_inputs:
+      shared_parameters:
+        interconnection_size: 1.e+5  # kW dedicated interconnection for heat pump
+      cost_parameters:
+        cost_year: 2026
+        electricity_buy_price: 0.04574
+        interconnection_capex_per_kw: 0.0
+        interconnection_opex_per_kw: 0.0
+        fixed_interconnection_cost: 0.0
+  district_heating:
+    performance_model:
+      model: DistrictHeatingDemand
+    cost_model:
+      model: DistrictHeatingDemandCostModel
+    model_inputs:
+      shared_parameters:
+        system_capacity_mw_th: 20.0
+      performance_parameters:
+        commodity: heat
+        commodity_rate_units: MW
+        demand_profile: 12.0  # 12 MW_th constant DH demand
+        min_supply_temp_C: 70.0  # DH loop requires >= 70 C
+        strict_temperature: true
+      cost_parameters:
+        cost_year: 2026
+        capex_per_mw_th: 5.0e+5
+        fixed_opex_per_mw_th_per_year: 1.5e+4
+        variable_opex_per_mwh_th: 0.5

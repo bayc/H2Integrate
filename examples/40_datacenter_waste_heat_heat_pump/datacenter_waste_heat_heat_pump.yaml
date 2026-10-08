@@ -1,0 +1,7 @@
+name: H2Integrate_config
+system_summary: >
+  Grid-connected air-cooled data center whose low-grade waste heat is upgraded
+  by an electric heat pump before being delivered to a district-heating loop.
+driver_config: driver_config.yaml
+technology_config: tech_config.yaml
+plant_config: plant_config.yaml

@@ -1,0 +1,78 @@
+name: technology_config
+description: >
+  Grid-connected water-cooled data center (PUE/WUE model, cooling case 5)
+  supplying its recovered waste heat directly to a district-heating loop.
+technologies:
+  water_feedstock:
+    performance_model:
+      model: FeedstockPerformanceModel
+    cost_model:
+      model: FeedstockCostModel
+    model_inputs:
+      shared_parameters:
+        commodity: water
+        commodity_rate_units: galUS/h
+      performance_parameters:
+        rated_capacity: 1.e+6  # galUS/h
+      cost_parameters:
+        cost_year: 2026
+        price: 0.01
+        annual_cost: 0.
+        start_up_cost: 0.
+  data_center:
+    performance_model:
+      model: DataCenterPUEWUEPerformanceModel
+    cost_model:
+      model: DataCenterPUEWUECostModel
+    model_inputs:
+      shared_parameters:
+        system_capacity_mw: 100.
+      performance_parameters:
+        compute_it_workload_profile: 100.0  # 100 MW IT workload
+        pue: 1.4
+        wue: 1.0
+        # Cooling case 5: midsize water-cooled chiller with plate HX heat recovery.
+        # Recoverable fraction 0.20, supply 40 C, return 30 C (Wahlroos 2018).
+        cooling_configuration: 5
+      cost_parameters:
+        cost_year: 2026
+        capex_per_mw: 4.0625e+6
+        fixed_opex_per_mw_per_year: 1.5e+5
+        # Electricity and water are purchased through grid_buy and water_feedstock,
+        # so the data center's own rates are zeroed to avoid double counting.
+        electricity_rate: 0.0  # $/kWh
+        water_rate: 0.0  # $/gal
+        waste_heat_sale_price_usd_per_mwh: 25.0  # $/MWh_th sold to DH loop
+  grid_buy:
+    performance_model:
+      model: GridPerformanceModel
+    cost_model:
+      model: GridCostModel
+    model_inputs:
+      shared_parameters:
+        interconnection_size: 1.e+6  # kW
+      cost_parameters:
+        cost_year: 2026
+        electricity_buy_price: 0.04574
+        interconnection_capex_per_kw: 0.0
+        interconnection_opex_per_kw: 0.0
+        fixed_interconnection_cost: 0.0
+  district_heating:
+    performance_model:
+      model: DistrictHeatingDemand
+    cost_model:
+      model: DistrictHeatingDemandCostModel
+    model_inputs:
+      shared_parameters:
+        system_capacity_mw_th: 40.0
+      performance_parameters:
+        commodity: heat
+        commodity_rate_units: MW
+        demand_profile: 30.0  # 30 MW_th constant DH demand
+        min_supply_temp_C: 35.0  # DH loop needs >= 35 C
+        strict_temperature: true
+      cost_parameters:
+        cost_year: 2026
+        capex_per_mw_th: 5.0e+5  # $/MW_th of connected DH capacity
+        fixed_opex_per_mw_th_per_year: 1.5e+4
+        variable_opex_per_mwh_th: 0.5
