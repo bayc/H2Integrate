@@ -99,6 +99,7 @@ changelog = "https://github.com/NatLabRockies/H2Integrate/blob/main/CHANGELOG.md
 
 [project.scripts]
 populate_tech_yaml = "h2integrate.preprocess.populate_tech_yaml:main"
+h2integrate_gui = "h2integrate.gui.__main__:main"
 
 [project.optional-dependencies]
 develop = [
@@ -124,8 +125,9 @@ gis = [
 ]
 # optiwindnet 0.3.1 made set_problem arguments keyword-only, which breaks ard-nrel 0.1.0b5
 ard = ["ard-nrel", "optiwindnet<0.3.1"]
+gui = ["streamlit>=1.40"]
 extras = ["h2integrate[gis,ard]"]
-all = ["h2integrate[develop,extras,examples]"]
+all = ["h2integrate[develop,extras,examples,gui]"]
 
 [tool.setuptools]
 include-package-data = true
